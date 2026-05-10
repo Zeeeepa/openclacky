@@ -34,13 +34,14 @@ module Clacky
       #                          different groups keeps those contexts separate.
       #   :chat                — one session per chat (all users in a group share it).
       #   :user                — one session per user (merges DMs and all groups).
-      def initialize(session_registry:, session_builder:, run_agent_task:, interrupt_session:, channel_config:, binding_mode: :chat_user)
+      def initialize(session_registry:, session_builder:, run_agent_task:, interrupt_session:, channel_config:, binding_mode: :chat_user, server_base_url: nil)
         @registry          = session_registry
         @session_builder   = session_builder
         @run_agent_task    = run_agent_task
         @interrupt_session = interrupt_session
         @channel_config    = channel_config
         @binding_mode      = binding_mode
+        @server_base_url   = server_base_url
         @adapters          = []
         @adapter_threads   = []
         @running           = false
@@ -75,6 +76,14 @@ module Clacky
       # @return [Array<Symbol>] platforms currently running
       def running_platforms
         @mutex.synchronize { @adapters.map(&:platform_id) }
+      end
+
+      # Find a running adapter by platform id.
+      # @param platform [Symbol, String] e.g. :feishu, :wecom
+      # @return [Clacky::Channel::Adapters::Base, nil]
+      def adapter_for(platform)
+        sym = platform.to_sym
+        @mutex.synchronize { @adapters.find { |a| a.platform_id == sym } }
       end
 
       # Proactively send a message to a user on the given platform.
@@ -388,6 +397,10 @@ module Clacky
         @registry.with_session(session_id) do |s|
           s[:ui]&.subscribe_channel(channel_ui)
           s[:channel_ui] = channel_ui
+
+          # Inject channel-specific capabilities into agent context so the LLM
+          # knows about internal API endpoints (e.g. feishu doc operations).
+          inject_channel_context(s[:agent], adapter)
         end
 
         Clacky::Logger.info("[ChannelManager] Auto-created session #{session_id[0, 8]} for #{key}")
@@ -462,6 +475,40 @@ module Clacky
         adapter.stop
       rescue StandardError => e
         Clacky::Logger.warn("[ChannelManager] Error stopping #{adapter.platform_id}: #{e.message}")
+      end
+
+      # Inject channel-specific capabilities description into the agent so it
+      # knows which internal API endpoints are available via terminal curl.
+      # Only sets agent.channel_context; the actual injection into LLM messages
+      # happens in Agent#inject_session_context.
+      private def inject_channel_context(agent, adapter)
+        return unless agent
+
+        context = channel_capabilities_for(adapter.platform_id)
+        agent.channel_context = context if context
+      end
+
+      # Returns a concise capabilities description for the given platform.
+      # The text is appended to the session context message sent to the LLM.
+      private def channel_capabilities_for(platform)
+        return nil unless @server_base_url
+
+        base = @server_base_url
+
+        case platform.to_sym
+        when :feishu
+          <<~CAP.strip
+            Feishu Doc API (curl):
+            - POST #{base}/api/feishu/docs {title} → {document_id, url}
+            - GET  #{base}/api/feishu/docs/:id/blocks
+            - POST #{base}/api/feishu/docs/:id/blocks {blocks:[{type,content}], index?} (omit index = append)
+            - DELETE #{base}/api/feishu/docs/:id/blocks {start_index, end_index}
+              range is (start_index, end_index]; clear-all = (0, last_index]
+            Block types: text | heading1..9 | bullet | ordered | code
+          CAP
+        else
+          nil
+        end
       end
     end
   end

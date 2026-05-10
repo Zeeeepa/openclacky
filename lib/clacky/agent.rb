@@ -45,6 +45,10 @@ module Clacky
                 :status, :error, :updated_at, :source,
                 :latest_latency  # Hash of latency metrics from the most recent LLM call (see Client#send_messages_with_tools)
     attr_accessor :pinned
+    # Channel capabilities context injected by ChannelManager when this session
+    # originates from an IM channel. Nil for non-channel sessions.
+    # Contains a short description of available internal API endpoints (e.g. feishu doc ops).
+    attr_accessor :channel_context
 
     def permission_mode
       @config&.permission_mode&.to_s || ""
@@ -1489,6 +1493,11 @@ module Clacky
       ].compact.join(". ")
 
       content = "[Session context: #{parts}]"
+
+      # Append channel capabilities when this session is bound to an IM channel
+      if @channel_context && !@channel_context.empty?
+        content += "\n\n## Channel Capabilities (internal API)\n#{@channel_context}"
+      end
 
       @history.append({
         role: "user",

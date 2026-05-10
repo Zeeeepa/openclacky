@@ -179,7 +179,8 @@ module Clacky
           session_builder:   method(:build_session),
           run_agent_task:    method(:run_agent_task),
           interrupt_session: method(:interrupt_session),
-          channel_config:    Clacky::ChannelConfig.load
+          channel_config:    Clacky::ChannelConfig.load,
+          server_base_url:   "http://#{@host}:#{@port}"
         )
         @browser_manager = Clacky::BrowserManager.instance
         @skill_loader    = Clacky::SkillLoader.new(working_dir: nil, brand_config: Clacky::BrandConfig.load)
@@ -478,6 +479,20 @@ module Clacky
           elsif method == "DELETE" && path.match?(%r{^/api/memories/[^/]+$})
             filename = URI.decode_www_form_component(path.sub("/api/memories/", ""))
             api_memories_delete(filename, res)
+
+          # ── Feishu Document API ──
+          elsif method == "POST" && path == "/api/feishu/docs"
+            api_feishu_create_doc(req, res)
+          elsif method == "GET" && path.match?(%r{^/api/feishu/docs/[^/]+/blocks$})
+            doc_id = path.sub("/api/feishu/docs/", "").sub("/blocks", "")
+            api_feishu_list_blocks(doc_id, res)
+          elsif method == "POST" && path.match?(%r{^/api/feishu/docs/[^/]+/blocks$})
+            doc_id = path.sub("/api/feishu/docs/", "").sub("/blocks", "")
+            api_feishu_write_blocks(doc_id, req, res)
+          elsif method == "DELETE" && path.match?(%r{^/api/feishu/docs/[^/]+/blocks$})
+            doc_id = path.sub("/api/feishu/docs/", "").sub("/blocks", "")
+            api_feishu_delete_blocks(doc_id, req, res)
+
           else
             not_found(res)
           end
@@ -1417,6 +1432,99 @@ module Clacky
       rescue StandardError => e
         json_response(res, 500, { error: e.message })
       end
+
+      # ── Feishu Document API ─────────────────────────────────────────────────
+      #
+      # These endpoints expose Feishu document write operations via the running
+      # feishu adapter's bot instance. The Agent can call them with terminal/curl
+      # to create, write, and manage Feishu documents.
+      #
+      # Requires the feishu channel to be running.
+
+      # POST /api/feishu/docs
+      # Create a new Feishu document.
+      # Body: { "title": "Doc Title", "folder_token": "optional" }
+      # Response: { "ok": true, "document_id": "...", "title": "...", "url": "..." }
+      private def api_feishu_create_doc(req, res)
+        bot = feishu_bot!
+        body = parse_json_body(req)
+        title = body["title"].to_s.strip
+
+        if title.empty?
+          json_response(res, 400, { ok: false, error: "title is required" })
+          return
+        end
+
+        result = bot.create_document(title, folder_token: body["folder_token"])
+        json_response(res, 200, { ok: true }.merge(result))
+      rescue StandardError => e
+        json_response(res, 500, { ok: false, error: e.message })
+      end
+
+      # GET /api/feishu/docs/:id/blocks
+      # List blocks in a document (inspect structure).
+      # Response: { "ok": true, "document_id": "...", "blocks": [...] }
+      private def api_feishu_list_blocks(doc_id, res)
+        bot = feishu_bot!
+        result = bot.list_doc_blocks(doc_id)
+        json_response(res, 200, { ok: true }.merge(result))
+      rescue StandardError => e
+        json_response(res, 500, { ok: false, error: e.message })
+      end
+
+      # POST /api/feishu/docs/:id/blocks
+      # Write content blocks to a document.
+      # Body: { "blocks": [{"type":"heading1","content":"Title"}, ...], "index": 0 }
+      # Response: { "ok": true, "blocks_created": N }
+      private def api_feishu_write_blocks(doc_id, req, res)
+        bot = feishu_bot!
+        body = parse_json_body(req)
+        blocks = body["blocks"]
+
+        unless blocks.is_a?(Array) && !blocks.empty?
+          json_response(res, 400, { ok: false, error: "blocks array is required and must not be empty" })
+          return
+        end
+
+        index = (body["index"] || 0).to_i
+        result = bot.write_doc_blocks(doc_id, blocks, index: index)
+        json_response(res, 200, { ok: true }.merge(result))
+      rescue StandardError => e
+        json_response(res, 500, { ok: false, error: e.message })
+      end
+
+      # DELETE /api/feishu/docs/:id/blocks
+      # Delete blocks by index range.
+      # Body: { "start_index": 0, "end_index": 5 }
+      # Response: { "ok": true, "blocks_deleted": N }
+      private def api_feishu_delete_blocks(doc_id, req, res)
+        bot = feishu_bot!
+        body = parse_json_body(req)
+        start_index = body["start_index"]
+        end_index = body["end_index"]
+
+        if start_index.nil? || end_index.nil?
+          json_response(res, 400, { ok: false, error: "start_index and end_index are required" })
+          return
+        end
+
+        result = bot.delete_doc_blocks(doc_id, start_index.to_i, end_index.to_i)
+        json_response(res, 200, { ok: true }.merge(result))
+      rescue StandardError => e
+        json_response(res, 500, { ok: false, error: e.message })
+      end
+
+      # Find the running feishu adapter's bot instance.
+      # Raises if feishu channel is not running.
+      # @return [Clacky::Channel::Adapters::Feishu::Bot]
+      private def feishu_bot!
+        adapter = @channel_manager.adapter_for(:feishu)
+        raise "Feishu channel is not running. Enable it first via channel config." unless adapter
+
+        adapter.bot
+      end
+
+      # ── End Feishu Document API ─────────────────────────────────────────────
 
       def api_list_channels(res)
         config   = Clacky::ChannelConfig.load

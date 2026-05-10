@@ -10,8 +10,6 @@ module Clacky
   module Channel
     module Adapters
       module Feishu
-        DEFAULT_DOMAIN = "https://open.feishu.cn"
-
         # Feishu adapter implementation.
         # Handles message receiving via WebSocket and sending via Bot API.
         class Adapter < Base
@@ -75,6 +73,10 @@ module Clacky
             @running = false
             @doc_retry_cache = {} # { chat_id => { doc_urls: [...], attempts: N } }
           end
+
+          # Expose bot instance for document API operations
+          # @return [Clacky::Channel::Adapters::Feishu::Bot]
+          attr_reader :bot
 
           # Start listening for messages via WebSocket
           # @yield [event] Yields standardized inbound messages

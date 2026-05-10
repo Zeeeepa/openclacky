@@ -3,11 +3,31 @@
 require "faraday"
 require "faraday/multipart"
 require "json"
+require_relative "docs_api"
 
 module Clacky
   module Channel
     module Adapters
       module Feishu
+        # Default API domain for Feishu Open Platform.
+        DEFAULT_DOMAIN = "https://open.feishu.cn" unless const_defined?(:DEFAULT_DOMAIN)
+
+        # Maps API domain host → user-facing document domain host.
+        # Add new entries here when supporting additional Feishu environments.
+        DOC_HOST_MAP = {
+          "open.feishu.cn" => "my.feishu.cn",
+          "open.larksuite.com" => "my.larksuite.com"
+        }.freeze
+
+        # Derive the user-facing document host from the API domain.
+        # Falls back to replacing "open." with "my." for unknown domains.
+        # @param api_domain [String] e.g. "https://open.feishu.cn"
+        # @return [String] e.g. "my.feishu.cn"
+        def self.doc_host_for(api_domain)
+          host = api_domain.to_s.sub(%r{^https?://}, "").chomp("/")
+          DOC_HOST_MAP.fetch(host) { host.sub(/\Aopen\./, "my.") }
+        end
+
         # Raised when the app lacks read permission for a specific Feishu document (error code 91403).
         # The user needs to add the app as a collaborator on the document.
         class FeishuDocPermissionError < StandardError
@@ -35,6 +55,10 @@ module Clacky
         class Bot
           API_TIMEOUT = 10
           DOWNLOAD_TIMEOUT = 60
+
+          # Mix in Feishu Docx (cloud document) read/write operations.
+          # See docs_api.rb for the public API surface.
+          include DocsApi
 
           def initialize(app_id:, app_secret:, domain: DEFAULT_DOMAIN)
             @app_id = app_id
@@ -295,6 +319,23 @@ module Clacky
               req.headers["Authorization"] = "Bearer #{tenant_access_token}"
               req.headers["Content-Type"] = "application/json"
               req.body = JSON.generate(body)
+            end
+
+            parse_response(response)
+          end
+
+          # Make authenticated DELETE request
+          # @param path [String] API path
+          # @param body [Hash, nil] Request body (some Feishu DELETE endpoints accept a body)
+          # @return [Hash] Parsed response
+          def delete(path, body = nil)
+            conn = build_connection
+            response = conn.delete(path) do |req|
+              req.headers["Authorization"] = "Bearer #{tenant_access_token}"
+              if body
+                req.headers["Content-Type"] = "application/json"
+                req.body = JSON.generate(body)
+              end
             end
 
             parse_response(response)
