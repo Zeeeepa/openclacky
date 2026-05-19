@@ -278,29 +278,36 @@ module Clacky
         (@clock.call - @start_time).to_i
       end
 
-      # Live-frame format: "<message>… (<elapsed>s)"
-      # Metadata like { attempt:, total: } is appended as "[i/N]" when
-      # present, to keep renderer-agnostic callers (e.g. tests) readable.
+      # Live-frame format: "<message>… (<elapsed>s · ↑in ↓out tokens)"
+      # Metadata like { attempt:, total: } is appended as "[i/N]" before
+      # the parenthetical so step counters stay readable.
       private def compose_frame(message, elapsed, metadata)
-        parts = [message.to_s]
+        head = message.to_s
         if metadata && (attempt = metadata[:attempt]) && (total = metadata[:total])
-          parts << "[#{attempt}/#{total}]"
+          head = "#{head} [#{attempt}/#{total}]"
         end
+
+        suffix_parts = []
+        suffix_parts << "#{elapsed}s" if elapsed > 0
         if metadata && (token_part = format_token_progress(metadata))
-          parts << token_part
+          suffix_parts << token_part
         end
-        head = parts.join(" ")
-        elapsed > 0 ? "#{head}… (#{elapsed}s)" : "#{head}…"
+
+        return "#{head}…" if suffix_parts.empty?
+        "#{head}… (#{suffix_parts.join(" · ")})"
       end
 
-      # Render LLM streaming progress as "↑1.2k ↓234" when the metadata
-      # carries token counts. Returns nil if no token info is present so
-      # the frame stays compact for non-LLM progress types.
+      # Render LLM streaming token counts as "↑1.2k ↓234 tokens".
+      # When input_tokens is unknown (e.g. OpenAI-compat streaming where
+      # prompt_tokens only arrives in the final frame), shows "↑—" so the
+      # column doesn't flicker between absent / present.
       private def format_token_progress(metadata)
         input  = metadata[:input_tokens]
         output = metadata[:output_tokens]
         return nil if input.nil? && output.nil?
-        "↑#{compact_count(input.to_i)} ↓#{compact_count(output.to_i)}"
+        in_str  = input.nil? || input.to_i <= 0 ? "—" : compact_count(input.to_i)
+        out_str = compact_count(output.to_i)
+        "↑#{in_str} ↓#{out_str} tokens"
       end
 
       private def compact_count(n)

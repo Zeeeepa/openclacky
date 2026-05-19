@@ -758,7 +758,7 @@ module Clacky
         return nil unless @ui
 
         last_emit_at = 0.0
-        min_interval = 0.05
+        min_interval = 0.25
         ->(input_tokens:, output_tokens:) {
           now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
           return if now - last_emit_at < min_interval && output_tokens > 0

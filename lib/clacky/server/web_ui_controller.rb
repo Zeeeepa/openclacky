@@ -225,15 +225,19 @@ module Clacky
 
       def show_progress(message = nil, prefix_newline: true, progress_type: "thinking", phase: "active", metadata: {})
         if phase == "active"
-          @progress_start_time = Time.now
-          # Store complete progress state for replay when user switches back to this session
+          # Only set start time when transitioning into a fresh progress phase.
+          # Streaming LLM calls fire show_progress every chunk for token updates;
+          # resetting the timer each time would make the elapsed counter jitter
+          # back to 0 in the UI and force the frontend to rebuild its interval.
+          if @live_progress_state.nil? || @live_progress_state[:progress_type] != progress_type
+            @progress_start_time = Time.now
+            @live_stdout_buffer = []
+          end
           @live_progress_state = {
             message: message,
             progress_type: progress_type,
             metadata: metadata
           }
-          # Reset stdout buffer for each new command so re-subscribe only replays current run
-          @live_stdout_buffer = []
         elsif phase == "done"
           @live_tool_call = nil   # command finished — nothing left to replay
           # Keep @live_stdout_buffer intact — it will be reset on the next show_progress call.

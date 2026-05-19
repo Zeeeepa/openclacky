@@ -327,5 +327,31 @@ RSpec.describe Clacky::UI2::ProgressHandle do
       expect(render[2]).not_to include("↑")
       h.finish
     end
+
+    it "renders elapsed and tokens inside a single dot-separated parenthetical" do
+      clock_value = 0.0
+      clock = -> { clock_value }
+      h = described_class.new(owner: owner, message: "Computing", tick_interval: 999, clock: clock)
+      h.start
+      clock_value = 12.0
+      h.update(metadata: { input_tokens: 0, output_tokens: 132 })
+
+      render = owner.events.reverse.find { |e| e[0] == :render }
+      expect(render[2]).to eq("Computing… (12s · ↑— ↓132 tokens)")
+      h.finish
+    end
+
+    it "uses the actual input count when input_tokens is positive" do
+      clock_value = 0.0
+      clock = -> { clock_value }
+      h = described_class.new(owner: owner, message: "Computing", tick_interval: 999, clock: clock)
+      h.start
+      clock_value = 3.0
+      h.update(metadata: { input_tokens: 1234, output_tokens: 56 })
+
+      render = owner.events.reverse.find { |e| e[0] == :render }
+      expect(render[2]).to eq("Computing… (3s · ↑1.2k ↓56 tokens)")
+      h.finish
+    end
   end
 end
