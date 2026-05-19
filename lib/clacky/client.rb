@@ -130,17 +130,23 @@ module Clacky
       cloned = deep_clone(messages)
 
       streaming_used = false
+      first_chunk_at = nil
+      wrapped_on_chunk = on_chunk && lambda do |**kwargs|
+        first_chunk_at ||= Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        on_chunk.call(**kwargs)
+      end
+
       t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       response =
         if bedrock?
           streaming_used = !on_chunk.nil?
-          send_bedrock_request(cloned, model, tools, max_tokens, caching_enabled, on_chunk: on_chunk)
+          send_bedrock_request(cloned, model, tools, max_tokens, caching_enabled, on_chunk: wrapped_on_chunk)
         elsif anthropic_format?
           streaming_used = !on_chunk.nil?
-          send_anthropic_request(cloned, model, tools, max_tokens, caching_enabled, on_chunk: on_chunk)
+          send_anthropic_request(cloned, model, tools, max_tokens, caching_enabled, on_chunk: wrapped_on_chunk)
         else
           streaming_used = !on_chunk.nil?
-          send_openai_request(cloned, model, tools, max_tokens, caching_enabled, on_chunk: on_chunk)
+          send_openai_request(cloned, model, tools, max_tokens, caching_enabled, on_chunk: wrapped_on_chunk)
         end
       t1 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
@@ -154,15 +160,12 @@ module Clacky
       end
 
       duration_ms = ((t1 - t0) * 1000).round
-      # Throughput is only meaningful with a reasonable output size; below ~10
-      # tokens the sample is too small to be informative and the result is
-      # wildly high (e.g. 1 token / 50ms → 20 tok/s is meaningless).
-      # Canonical usage hashes from message_format/* all use :completion_tokens.
+      ttft_ms = first_chunk_at ? ((first_chunk_at - t0) * 1000).round : duration_ms
       output_tokens = response[:usage]&.dig(:completion_tokens).to_i
       tps = (output_tokens >= 10 && duration_ms > 0) ? (output_tokens * 1000.0 / duration_ms).round(1) : nil
 
       response[:latency] = {
-        ttft_ms:     duration_ms,      # non-streaming: TTFT == full duration
+        ttft_ms:     ttft_ms,
         duration_ms: duration_ms,
         output_tokens: output_tokens,
         tps:         tps,
