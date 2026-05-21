@@ -410,6 +410,86 @@ module Clacky
       end
     end
 
+    # Fetch the list of free (unencrypted, published) skills available for the
+    # configured package_name. Anonymous endpoint — no license key required.
+    # This is what powers the "no serial number" free mode: a branded install
+    # that is not activated still gets the creator's free skills automatically.
+    #
+    # Returns { success: bool, skills: [], error: }. Each skill in the returned
+    # array carries the same shape as fetch_brand_skills! (name, latest_version,
+    # description, etc.) so install_brand_skill! can consume it directly.
+    def fetch_free_skills!
+      return { success: false, error: "Not branded", skills: [] } unless branded?
+      if @package_name.nil? || @package_name.strip.empty?
+        return { success: false, error: "package_name not configured", skills: [] }
+      end
+
+      encoded_pkg = URI.encode_www_form_component(@package_name.strip)
+      response    = platform_client.get("/api/v1/distributions/free_skills?package_name=#{encoded_pkg}")
+
+      if response[:success] && response[:data].is_a?(Hash)
+        installed = installed_brand_skills
+        skills    = (response[:data]["skills"] || []).map do |skill|
+          normalized   = skill["name"].to_s.downcase.gsub(/[\s_]+/, "-").gsub(/[^a-z0-9-]/, "").gsub(/-+/, "-")
+          name         = installed.keys.find { |k| k == normalized } || normalized
+          local        = installed[name]
+          latest_ver   = (skill["latest_version"] || {})["version"] || skill["version"]
+          needs_update = local ? version_older?(local["version"], latest_ver) : false
+          skill.merge(
+            "name"              => name,
+            "installed_version" => local ? local["version"] : nil,
+            "needs_update"      => needs_update
+          )
+        end
+        { success: true, skills: skills, paid_skills_count: response[:data]["paid_skills_count"].to_i }
+      else
+        { success: false, error: response[:error] || "Failed to fetch free skills", skills: [], paid_skills_count: 0 }
+      end
+    end
+
+    # Install a single free (unencrypted) skill. Thin wrapper around
+    # install_brand_skill! that records the skill as encrypted: false so the
+    # loader reads SKILL.md directly without attempting decryption.
+    def install_free_skill!(skill_info)
+      install_brand_skill!(skill_info, encrypted: false)
+    end
+
+    # Synchronise free skills in the background for unactivated branded installs.
+    #
+    # Mirrors sync_brand_skills_async! but uses the public free_skills endpoint
+    # so no license is required. Only runs when the install is branded and NOT
+    # activated — once a license is activated the regular brand-skill sync
+    # takes over (and may include additional encrypted skills).
+    #
+    # @return [Thread, nil]
+    def sync_free_skills_async!(on_complete: nil)
+      return nil unless branded?
+      return nil if activated?
+      return nil if ENV["CLACKY_TEST"] == "1"
+
+      Thread.new do
+        Thread.current.abort_on_exception = false
+
+        begin
+          result = fetch_free_skills!
+          next unless result[:success]
+
+          remote_skill_names = result[:skills].map { |s| s["name"] }
+          installed_brand_skills.each_key do |local_name|
+            send(:delete_brand_skill!, local_name) unless remote_skill_names.include?(local_name)
+          end
+
+          installed = installed_brand_skills
+          to_install = result[:skills].select { |s| installed[s["name"]].nil? || s["needs_update"] }
+          results    = to_install.map { |skill_info| install_free_skill!(skill_info) }
+
+          on_complete&.call(results)
+        rescue StandardError
+          # Background sync failures are intentionally swallowed.
+        end
+      end
+    end
+
     # Upload (publish) a custom skill ZIP to the OpenClacky Cloud API.
     # Calls POST /api/v1/client/skills (system-license endpoint).
     # zip_data is the raw binary content of the ZIP file.
@@ -629,7 +709,9 @@ module Clacky
 
     # Install (or update) a single brand skill by downloading and extracting its zip.
     # skill_info: a hash from fetch_brand_skills! with at least name + latest_version.download_url + version
-    def install_brand_skill!(skill_info)
+    # encrypted: whether the ZIP contains AES-encrypted .enc files + MANIFEST.enc.json (true)
+    #            or plaintext SKILL.md and supporting files (false, used by free-mode).
+    def install_brand_skill!(skill_info, encrypted: true)
       require "net/http"
       require "uri"
 
@@ -698,10 +780,10 @@ module Clacky
 
       FileUtils.rm_f(tmp_zip)
 
-      # Record installed version in brand_skills.json (including description for
-      # offline display when the remote API is unreachable).
-      # encrypted: true because the ZIP contains MANIFEST.enc.json + AES-256-GCM encrypted files.
-      record_installed_skill(slug, version, skill_info["description"], encrypted: true, description_zh: skill_info["description_zh"], name_zh: skill_info["name_zh"])
+      record_installed_skill(slug, version, skill_info["description"],
+                             encrypted: encrypted,
+                             description_zh: skill_info["description_zh"],
+                             name_zh: skill_info["name_zh"])
 
       { success: true, name: slug, version: version }
     rescue StandardError, ScriptError => e

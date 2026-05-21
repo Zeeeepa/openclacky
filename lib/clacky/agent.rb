@@ -102,6 +102,9 @@ module Clacky
       # Background sync: compare remote skill versions and download updates quietly.
       # Runs in a daemon thread so Agent startup is never blocked.
       @brand_config.sync_brand_skills_async!
+      # Free-mode counterpart: branded but not activated → fetch unencrypted skills
+      # via the public endpoint so users get a working install with no serial number.
+      @brand_config.sync_free_skills_async!
 
       # Initialize Time Machine
       init_time_machine

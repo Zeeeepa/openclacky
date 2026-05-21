@@ -752,6 +752,9 @@ module Clacky
             else
               Clacky::Logger.debug("[Brand] async distribution refresh skipped/failed — #{result[:message]}")
             end
+            # Free-mode skill sync: branded + unactivated installs need their
+            # creator's free skills auto-installed for the "no serial number" UX.
+            brand.sync_free_skills_async!
           rescue StandardError => e
             Clacky::Logger.warn("[Brand] async distribution refresh raised: #{e.class}: #{e.message}")
           ensure
@@ -797,12 +800,30 @@ module Clacky
             refresh_pending = true
           end
 
+          # Free-mode counts: synchronous fetch is acceptable here because
+          # this endpoint is polled lazily and the platform call is cached
+          # via http keep-alive. On error we just return zero counts and the
+          # banner falls back to the legacy "not activated" message.
+          free_count  = 0
+          paid_count  = 0
+          begin
+            result = brand.fetch_free_skills!
+            if result[:success]
+              free_count = result[:skills].size
+              paid_count = result[:paid_skills_count].to_i
+            end
+          rescue StandardError
+            # Network errors are non-fatal here.
+          end
+
           json_response(res, 200, {
             branded:                       true,
             needs_activation:              true,
             product_name:                  brand.product_name,
             test_mode:                     @brand_test,
-            distribution_refresh_pending:  refresh_pending
+            distribution_refresh_pending:  refresh_pending,
+            free_skills_count:             free_count,
+            paid_skills_count:             paid_count
           })
           return
         end
@@ -918,7 +939,30 @@ module Clacky
         brand = Clacky::BrandConfig.load
 
         unless brand.activated?
-          json_response(res, 403, { ok: false, error: "License not activated" })
+          # Free-mode: branded but no license. Return the unencrypted skills
+          # available to anonymous installs so the Brand Skills tab is not
+          # empty and the user can install/use them without a serial number.
+          # Each skill is tagged is_free=true so the UI can show a "Free" badge.
+          result = brand.fetch_free_skills!
+
+          if result[:success]
+            free_skills = result[:skills].map { |s| s.merge("is_free" => true) }
+            json_response(res, 200, {
+              ok:                true,
+              skills:            free_skills,
+              free_mode:         true,
+              paid_skills_count: result[:paid_skills_count].to_i
+            })
+          else
+            json_response(res, 200, {
+              ok:                true,
+              skills:            [],
+              free_mode:         true,
+              paid_skills_count: 0,
+              warning_code:      "remote_unavailable",
+              warning:           result[:error] || "Could not reach the license server."
+            })
+          end
           return
         end
 
@@ -963,8 +1007,29 @@ module Clacky
       def api_brand_skill_install(slug, req, res)
         brand = Clacky::BrandConfig.load
 
+        # Free-mode: branded but not activated. Fall back to the public free
+        # skills endpoint and install with encrypted: false. Paid (encrypted)
+        # skills still require activation and will return 404 here.
         unless brand.activated?
-          json_response(res, 403, { ok: false, error: "License not activated" })
+          fetch_result = brand.fetch_free_skills!
+          unless fetch_result[:success]
+            json_response(res, 422, { ok: false, error: fetch_result[:error] })
+            return
+          end
+
+          skill_info = fetch_result[:skills].find { |s| s["name"] == slug }
+          unless skill_info
+            json_response(res, 404, { ok: false, error: "Skill '#{slug}' is not a free skill — activate your license to access it." })
+            return
+          end
+
+          result = brand.install_free_skill!(skill_info)
+          if result[:success]
+            @skill_loader = Clacky::SkillLoader.new(working_dir: nil, brand_config: brand)
+            json_response(res, 200, { ok: true, name: result[:name], version: result[:version] })
+          else
+            json_response(res, 422, { ok: false, error: result[:error] })
+          end
           return
         end
 
