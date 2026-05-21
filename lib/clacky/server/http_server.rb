@@ -803,30 +803,12 @@ module Clacky
             refresh_pending = true
           end
 
-          # Free-mode counts: synchronous fetch is acceptable here because
-          # this endpoint is polled lazily and the platform call is cached
-          # via http keep-alive. On error we just return zero counts and the
-          # banner falls back to the legacy "not activated" message.
-          free_count  = 0
-          paid_count  = 0
-          begin
-            result = brand.fetch_free_skills!
-            if result[:success]
-              free_count = result[:skills].size
-              paid_count = result[:paid_skills_count].to_i
-            end
-          rescue StandardError
-            # Network errors are non-fatal here.
-          end
-
           json_response(res, 200, {
             branded:                       true,
             needs_activation:              true,
             product_name:                  brand.product_name,
             test_mode:                     @brand_test,
-            distribution_refresh_pending:  refresh_pending,
-            free_skills_count:             free_count,
-            paid_skills_count:             paid_count
+            distribution_refresh_pending:  refresh_pending
           })
           return
         end
