@@ -10,6 +10,8 @@
   <a href="README.md">English</a> · <a href="README_CN.md">简体中文</a>
 </p>
 
+> Contributing? Read **[CONTRIBUTING.md](./CONTRIBUTING.md)** before opening a PR.
+
 **The most Token-efficient open-source AI Agent.**
 
 OpenClacky matches Claude Code on capability at comparable cost, and saves significantly against other open-source agents (~50% vs OpenClaw, ~3× cheaper than Hermes). 100% open source (MIT), BYOK with any OpenAI-compatible model, built on two years of Agentic R&D and harness engineering.
@@ -183,6 +185,14 @@ bin/clacky
 - **2 years of Agentic R&D** — 3 generations of architecture
 - **16 core tools** — minimal by design
 - **Backed by** MiraclePlus · ZhenFund · Sequoia China · Hillhouse Capital
+
+## Contributors
+
+Every line of code, bug report, and thoughtful review matters. Thank you for making OpenClacky better.
+
+<a href="https://github.com/clacky-ai/openclacky/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=clacky-ai/openclacky" />
+</a>
 
 ## Contributing
 

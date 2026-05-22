@@ -74,8 +74,10 @@ module Clacky
     # own (editable, up-to-date) copy rather than the encrypted distribution copy.
     # @return [Array<Skill>]
     def load_brand_skills
-      return [] unless @brand_config&.activated?
+      return [] unless @brand_config && (@brand_config.branded? || @brand_config.activated?)
       return [] if ENV["CLACKY_TEST"] == "1"
+
+      activated = @brand_config.activated?
 
       # Use brand_config#brand_skills_dir so the path respects CONFIG_DIR,
       # which is important for test isolation via stub_const.
@@ -92,6 +94,8 @@ module Clacky
         encrypted = skill_dir.join("SKILL.md.enc").exist?
         plain     = skill_dir.join("SKILL.md").exist?
         next unless encrypted || plain
+
+        next if encrypted && !activated
 
         skill_name = skill_dir.basename.to_s
 

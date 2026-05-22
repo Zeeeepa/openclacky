@@ -6,6 +6,8 @@
 [![Downloads](https://img.shields.io/gem/dt/openclacky?label=downloads&style=flat-square&color=brightgreen)](https://rubygems.org/gems/openclacky)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)](LICENSE.txt)
 
+> 想贡献代码？提 PR 前请先读 **[CONTRIBUTING.md](./CONTRIBUTING.md)**。
+
 **最省 Token 的开源 AI Agent。**
 
 OpenClacky 在任务能力上对齐 Claude Code，成本相当，同时相比其他开源 Agent 有显著优势（约节省 50% vs OpenClaw，约便宜 3× vs Hermes）。100% 开源（MIT），支持 BYOK 接入任意 OpenAI 兼容模型，背后是两年 Agentic 研发与 Harness 工程积累。
@@ -188,6 +190,14 @@ bin/clacky
 - [从 ShowMeBug 到 OpenClacky：我对 AI 时代的 4 次下注](https://mp.weixin.qq.com/s/wTW-IU5Czu-OpJTFh_mwgA)
 - [我把 AI 账单从 30 美金打到 5 美金](https://mp.weixin.qq.com/s/BDhE0y8xbX0ea3vLlV37Ig)
 - [100% Cache 命中的 Harness 怎么设计：一个开源 AI Agent 的 7 个工程决策](https://mp.weixin.qq.com/s/Rc1xk0Qw168D4Y07kkBiGQ)
+
+## 贡献者
+
+每一行代码、每一个 Bug 报告、每一次认真的 Review，都让 OpenClacky 变得更好。感谢你们！
+
+<a href="https://github.com/clacky-ai/openclacky/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=clacky-ai/openclacky" />
+</a>
 
 ## 参与贡献
 

@@ -338,25 +338,16 @@ module Clacky
 
       # ── Brand license check (CLI mode) ──────────────────────────────────────
       #
-      # Called at the start of run_agent_with_ui2, before UI2 raw mode begins.
-      # Uses Thor's say + tty-prompt for interaction (both are existing dependencies).
-      #
-      # Flow:
-      #   not branded       -> skip (standard OpenClacky experience)
-      #   branded, no key   -> prompt for license key and activate
-      #   branded, expired  -> warn and continue
-      #   branded, active   -> send heartbeat if interval elapsed (once per day)
+      # CLI is a developer-oriented entrypoint: we never block startup with an
+      # interactive license prompt. Unactivated installs run in free mode; the
+      # WebUI is where end-users activate. This method only surfaces non-blocking
+      # warnings (expiry, offline grace period) and dispatches async heartbeats.
       private def check_brand_license_cli
         brand = Clacky::BrandConfig.load
         return unless brand.branded?
+        return unless brand.activated?
 
-        Clacky::Logger.info("[Brand] check_brand_license_cli: activated=#{brand.activated?} expired=#{brand.expired?} expires_at=#{brand.license_expires_at&.iso8601 || "nil"} last_heartbeat=#{brand.license_last_heartbeat&.iso8601 || "nil"}")
-
-        unless brand.activated?
-          Clacky::Logger.info("[Brand] check_brand_license_cli: not activated, prompting user")
-          cli_prompt_license_activation(brand)
-          return
-        end
+        Clacky::Logger.info("[Brand] check_brand_license_cli: activated=true expired=#{brand.expired?} expires_at=#{brand.license_expires_at&.iso8601 || "nil"} last_heartbeat=#{brand.license_last_heartbeat&.iso8601 || "nil"}")
 
         if brand.expired?
           Clacky::Logger.warn("[Brand] check_brand_license_cli: license expired at #{brand.license_expires_at&.iso8601}")
@@ -366,11 +357,6 @@ module Clacky
           return
         end
 
-        # Heartbeat is fire-and-forget — startup must never block on the
-        # license server. The grace_period_exceeded? check below now keys off
-        # license_last_heartbeat_failure (set on a failed heartbeat, cleared
-        # on success), so a user who simply hasn't run the app for >3 days
-        # no longer sees a false "offline" warning on first launch.
         if brand.heartbeat_due?
           Clacky::Logger.info("[Brand] check_brand_license_cli: heartbeat due, dispatching async...")
           Thread.new do
@@ -394,44 +380,6 @@ module Clacky
           say "WARNING: Could not reach the #{brand.product_name} license server.", :yellow
           say "License has been offline for more than 3 days. Please check your connection.", :yellow
           say ""
-        end
-      end
-
-      # Interactive license key prompt using tty-prompt.
-      private def cli_prompt_license_activation(brand)
-        prompt = TTY::Prompt.new
-
-        say ""
-        say "Welcome to #{brand.product_name}!", :cyan
-        say "A license key is required to activate this installation."
-        say ""
-
-        loop do
-          key = prompt.ask("Enter your license key (XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX):",
-                           required: false) { |q| q.modify :strip }
-
-          if key.nil? || key.empty?
-            say "No key entered. You can activate later by re-launching.", :yellow
-            say ""
-            return
-          end
-
-          unless key.match?(/\A[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{8}){4}\z/)
-            say "Invalid key format. Expected: XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX", :red
-            next
-          end
-
-          say "Activating..."
-          result = brand.activate!(key)
-
-          if result[:success]
-            say result[:message], :green
-            say ""
-            return
-          else
-            say result[:message], :red
-            say "(Press Enter to skip activation.)"
-          end
         end
       end
 
@@ -1108,8 +1056,8 @@ module Clacky
         $stdout = Clacky::Server::EPIPESafeIO.new($stdout)
         $stderr = Clacky::Server::EPIPESafeIO.new($stderr)
 
-        fd         = ENV["CLACKY_INHERIT_FD"].to_i
-        master_pid = ENV["CLACKY_MASTER_PID"].to_i
+        fd              = ENV["CLACKY_INHERIT_FD"].to_i
+        master_pid      = ENV["CLACKY_MASTER_PID"].to_i
         # Must use TCPServer.for_fd (not Socket.for_fd) so that accept_nonblock
         # returns a single Socket, not [Socket, Addrinfo] — WEBrick expects the former.
         socket     = TCPServer.for_fd(fd)

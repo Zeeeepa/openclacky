@@ -288,6 +288,12 @@ module Clacky
 
       public
 
+      # Count all cron sessions on disk (not filtered by pagination).
+      def cron_count
+        return 0 unless @session_manager
+        @session_manager.all_sessions.count { |s| s_source(s) == "cron" }
+      end
+
       # Delete a session from registry (and interrupt its thread).
       def delete(session_id)
         @mutex.synchronize do
@@ -358,6 +364,27 @@ module Clacky
         end
 
         to_evict.each { |id, session| persist_and_release(id, session) }
+      end
+
+      # Yield [session_id, agent, thread] for each session that currently has
+      # an in-memory agent. Used by the worker's graceful-shutdown path to
+      # flush any unsaved @history (e.g. a user message added at the start
+      # of Agent#run that hasn't yet reached the save-on-completion branch
+      # in run_agent_task).
+      #
+      # The session id list is snapshotted under the mutex so concurrent
+      # mutations don't disturb iteration; the yield happens outside the
+      # mutex so callers can do slow I/O (JSON serialization, File.write)
+      # without blocking other registry operations.
+      def each_live_agent
+        snapshot = @mutex.synchronize do
+          @sessions.filter_map do |id, s|
+            agent = s[:agent]
+            next nil unless agent
+            [id, agent, s[:thread]]
+          end
+        end
+        snapshot.each { |id, agent, thread| yield id, agent, thread }
       end
 
       private def persist_and_release(id, session)
