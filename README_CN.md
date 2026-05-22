@@ -6,6 +6,8 @@
 [![Downloads](https://img.shields.io/gem/dt/openclacky?label=downloads&style=flat-square&color=brightgreen)](https://rubygems.org/gems/openclacky)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)](LICENSE.txt)
 
+> 想贡献代码？提 PR 前请先读 **[CONTRIBUTING.md](./CONTRIBUTING.md)**。
+
 **最省 Token 的开源 AI Agent。**
 
 OpenClacky 在任务能力上对齐 Claude Code，成本相当，同时相比其他开源 Agent 有显著优势（约节省 50% vs OpenClaw，约便宜 3× vs Hermes）。100% 开源（MIT），支持 BYOK 接入任意 OpenAI 兼容模型，背后是两年 Agentic 研发与 Harness 工程积累。

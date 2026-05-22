@@ -10,6 +10,8 @@
   <a href="README.md">English</a> · <a href="README_CN.md">简体中文</a>
 </p>
 
+> Contributing? Read **[CONTRIBUTING.md](./CONTRIBUTING.md)** before opening a PR.
+
 **The most Token-efficient open-source AI Agent.**
 
 OpenClacky matches Claude Code on capability at comparable cost, and saves significantly against other open-source agents (~50% vs OpenClaw, ~3× cheaper than Hermes). 100% open source (MIT), BYOK with any OpenAI-compatible model, built on two years of Agentic R&D and harness engineering.
