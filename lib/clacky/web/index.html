@@ -747,6 +747,15 @@
             <button id="settings-btn-currency-usd" class="settings-lang-btn" data-currency="USD">$ USD</button>
             <button id="settings-btn-currency-cny" class="settings-lang-btn" data-currency="CNY">¥ CNY</button>
           </div>
+          <div class="settings-exchange-rate" id="exchange-rate-section" style="display: none;">
+            <label class="settings-exchange-rate-label">
+              <span data-i18n="settings.currency.exchangeRate">Exchange Rate (1 USD =)</span>
+              <div class="settings-exchange-rate-input-wrapper">
+                <input type="number" id="settings-exchange-rate" class="settings-exchange-rate-input" step="0.0001" min="0.0001" placeholder="6.7944">
+                <span class="settings-exchange-rate-unit">CNY</span>
+              </div>
+            </label>
+          </div>
         </section>
 
         <!-- Brand & License section -->

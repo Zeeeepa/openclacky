@@ -231,8 +231,18 @@ The Billing panel is accessible from the sidebar under "My Data":
 - **Summary cards** — Total cost, tokens, API requests
 - **Token breakdown** — Prompt, completion, cache read/write
 - **By Model table** — Cost and request count per model
-- **Daily chart** — Visual bar chart of recent usage
+- **Daily chart** — Visual bar chart of recent usage with detailed tooltips
 - **Period selector** — Filter by day/week/month/year/all
+
+### Daily Chart Tooltips
+
+Hover over any bar in the daily chart to see detailed information:
+- Date and total cost
+- Input tokens (prompt)
+- Output tokens (completion)
+- Cache read tokens with hit rate percentage
+- Cache write tokens
+- Number of API requests
 
 ---
 
@@ -240,16 +250,25 @@ The Billing panel is accessible from the sidebar under "My Data":
 
 The Web UI supports multiple currencies for cost display:
 
-| Currency | Symbol | Exchange Rate |
-|----------|--------|---------------|
+| Currency | Symbol | Default Exchange Rate |
+|----------|--------|----------------------|
 | USD | $ | 1.0 (base) |
-| CNY | ¥ | 6.7944 |
+| CNY | ¥ | 6.7944 (customizable) |
 
 ### Configuration
 
 1. Go to **Settings** page
 2. Find the **Currency** section
 3. Select `$ USD` or `¥ CNY`
+4. When CNY is selected, you can customize the exchange rate
+
+### Custom Exchange Rate
+
+When CNY is selected, an exchange rate input field appears:
+- Default rate: 6.7944 (1 USD = 6.7944 CNY)
+- Enter any positive number to customize
+- Changes take effect immediately
+- Rate is saved to browser localStorage
 
 ### Scope
 
@@ -263,13 +282,16 @@ Currency settings apply to:
 
 ### Implementation
 
-Currency preference is stored in browser `localStorage` under key `clacky-currency`.
+Currency preference is stored in browser `localStorage`:
+- `clacky-currency`: Currency code ("USD" or "CNY")
+- `clacky-exchange-rate`: Custom exchange rate (number)
 
 ```javascript
 // Access currency utilities from Billing module
 Billing.getCurrency()       // "USD" or "CNY"
 Billing.getCurrencySymbol() // "$" or "¥"
 Billing.convertCost(usd)    // Convert USD to selected currency
+Billing.getExchangeRate()   // Get current exchange rate
 ```
 
 ---

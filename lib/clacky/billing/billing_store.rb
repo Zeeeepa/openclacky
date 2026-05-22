@@ -130,6 +130,10 @@ module Clacky
             date: date,
             cost: day_records.sum { |r| r.cost_usd || 0 }.round(6),
             tokens: day_records.sum { |r| r.total_tokens },
+            prompt_tokens: day_records.sum { |r| r.prompt_tokens || 0 },
+            completion_tokens: day_records.sum { |r| r.completion_tokens || 0 },
+            cache_read_tokens: day_records.sum { |r| r.cache_read_tokens || 0 },
+            cache_write_tokens: day_records.sum { |r| r.cache_write_tokens || 0 },
             requests: day_records.size
           }
         end.reverse
