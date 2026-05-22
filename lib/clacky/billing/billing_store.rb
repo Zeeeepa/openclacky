@@ -155,21 +155,19 @@ module Clacky
         deleted
       end
 
-      private
-
-      def ensure_billing_dir
+      private def ensure_billing_dir
         FileUtils.mkdir_p(@billing_dir) unless Dir.exist?(@billing_dir)
       end
 
-      def current_month_file
+      private def current_month_file
         File.join(@billing_dir, "#{Time.now.strftime('%Y-%m')}.jsonl")
       end
 
-      def billing_files
+      private def billing_files
         Dir.glob(File.join(@billing_dir, "*.jsonl")).sort.reverse
       end
 
-      def period_start(period)
+      private def period_start(period)
         now = Time.now
         case period
         when :day
