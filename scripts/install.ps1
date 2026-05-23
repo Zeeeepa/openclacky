@@ -33,6 +33,8 @@ $global:DisplayName = if ($BrandName)   { $BrandName }   else { "OpenClacky" }
 $global:DisplayCmd  = if ($CommandName) { $CommandName } else { "openclacky" }
 
 $CLACKY_CDN_BASE_URL   = "https://oss.1024code.com"
+$CLACKY_CDN_PRIMARY_HOST = "oss.1024code.com"
+$CLACKY_CDN_BACKUP_HOST  = "clackyai-1258723534.cos.ap-guangzhou.myqcloud.com"
 $INSTALL_PS1_COMMAND   = "powershell -c `"irm $CLACKY_CDN_BASE_URL/clacky-ai/openclacky/main/scripts/install.ps1 | iex`""
 $INSTALL_SCRIPT_URL    = "$CLACKY_CDN_BASE_URL/clacky-ai/openclacky/main/scripts/install.sh"
 $UBUNTU_WSL_AMD64_URL        = "$CLACKY_CDN_BASE_URL/ubuntu-jammy-wsl-amd64-ubuntu22.04lts.rootfs.tar.gz"
@@ -72,18 +74,24 @@ function Get-SafeTempDir {
 # Invoke-WebRequest. Returns $true on success, $false on failure.
 function Invoke-Download {
     param([string]$Url, [string]$OutFile)
-    $ok = $false
+    $urls = @($Url)
     try {
-        curl.exe -L --fail --progress-bar $Url -o $OutFile
-        $ok = ($LASTEXITCODE -eq 0)
+        if (([Uri]$Url).Host -eq $CLACKY_CDN_PRIMARY_HOST) {
+            $urls += ([Uri]$Url).AbsoluteUri.Replace($CLACKY_CDN_PRIMARY_HOST, $CLACKY_CDN_BACKUP_HOST)
+        }
     } catch {}
-    if (-not $ok) {
+    foreach ($u in $urls) {
+        if ($u -ne $Url) { Write-Warn "Primary download failed, retrying with backup mirror." }
         try {
-            Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing
-            $ok = $true
-        } catch { $ok = $false }
+            curl.exe -L --fail --progress-bar $u -o $OutFile
+            if ($LASTEXITCODE -eq 0) { return $true }
+        } catch {}
+        try {
+            Invoke-WebRequest -Uri $u -OutFile $OutFile -UseBasicParsing -TimeoutSec 60
+            return $true
+        } catch {}
     }
-    return $ok
+    return $false
 }
 
 # Verify SHA256 of a local file against a remote .sha256 file.
