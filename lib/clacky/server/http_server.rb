@@ -3854,7 +3854,7 @@ module Clacky
       # ── Helpers ───────────────────────────────────────────────────────────────
 
       def default_working_dir
-        File.expand_path("~/clacky_workspace")
+        @agent_config&.default_working_dir || File.expand_path("~/clacky_workspace")
       end
 
       # Create a session in the registry and wire up Agent + WebUIController.
