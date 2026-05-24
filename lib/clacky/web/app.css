@@ -8637,8 +8637,6 @@ body.setup-mode[data-theme="dark"] {
   white-space: nowrap;
 }
 
-/* Exchange Rate Settings */
-.settings-exchange-rate {
 /* ── MCP panel ───────────────────────────────────────────────────── */
 #mcp-panel {
   flex: 1;
@@ -8948,6 +8946,9 @@ body.setup-mode[data-theme="dark"] {
   }
   .btn-mcp-cta { justify-content: center; }
 }
+
+/* Exchange Rate Settings */
+.settings-exchange-rate {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--color-border);
