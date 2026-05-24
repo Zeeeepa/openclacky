@@ -167,12 +167,12 @@ RSpec.describe Clacky::ModelPricing do
           cache_read_input_tokens: 30_000  # cache hit portion
         }
 
-        # Regular input (non-cached): ((100_000 - 30_000) / 1_000_000) * $1.74 = $0.1218
-        # Output:                     (50_000 / 1_000_000)             * $3.48 = $0.174
-        # Cache read:                 (30_000 / 1_000_000)             * $0.0145 = $0.000435
-        # Total: $0.296235
+        # Regular input (non-cached): ((100_000 - 30_000) / 1_000_000) * $0.435 = $0.030450
+        # Output:                     (50_000 / 1_000_000)             * $0.87  = $0.0435
+        # Cache read:                 (30_000 / 1_000_000)             * $0.003625 = $0.00010875
+        # Total: $0.07405875
         result = described_class.calculate_cost(model: "deepseek-v4-pro", usage: usage)
-        expect(result[:cost]).to be_within(0.0001).of(0.296235)
+        expect(result[:cost]).to be_within(0.0001).of(0.07405875)
         expect(result[:source]).to eq(:price)
       end
 

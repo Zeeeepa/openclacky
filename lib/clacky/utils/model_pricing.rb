@@ -111,6 +111,10 @@ module Clacky
       #   - "cache miss input" = regular prompt_tokens rate
       #   - "cache hit input"  = cache_read rate (DeepSeek has no separate cache-write charge)
       #   - No tiered pricing (single rate regardless of context length)
+      # Cache-hit prices are 1/10 of launch (global, permanent since 2026-04-26).
+      # v4-pro is on a 75% off promo through 2026-05-31 23:59 CST; the same
+      # numbers become the permanent price after that date (= original × 1/4),
+      # so we bill at the discounted rates both before and after the cutover.
       "deepseek-v4-flash" => {
         input: {
           default: 0.14,                  # $0.14/MTok cache miss
@@ -122,22 +126,22 @@ module Clacky
         },
         cache: {
           write: 0.14,                    # DeepSeek doesn't charge extra for writes; bill at miss rate
-          read: 0.0028                     # $0.0028/MTok cache hit
+          read: 0.0028                    # $0.0028/MTok cache hit
         }
       },
 
       "deepseek-v4-pro" => {
         input: {
-          default: 1.74,                  # $1.74/MTok cache miss
-          over_200k: 1.74
+          default: 0.435,                 # $0.435/MTok cache miss (75% off; permanent after 5/31)
+          over_200k: 0.435
         },
         output: {
-          default: 3.48,                  # $3.48/MTok
-          over_200k: 3.48
+          default: 0.87,                  # $0.87/MTok (75% off; permanent after 5/31)
+          over_200k: 0.87
         },
         cache: {
-          write: 1.74,                    # no separate write charge; bill at miss rate
-          read: 0.0145                     # $0.0145/MTok cache hit
+          write: 0.435,                   # no separate write charge; bill at miss rate
+          read: 0.003625                  # $0.003625/MTok cache hit (1/10 × 75% off)
         }
       },
 
