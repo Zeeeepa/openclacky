@@ -923,11 +923,6 @@
         <div class="modal-body">
           <input type="hidden" id="model-modal-index" value="-1">
           
-          <label class="model-field">
-            <span class="field-label" data-i18n="settings.models.field.name">Name</span>
-            <input type="text" id="model-modal-name" class="field-input" placeholder="My Model" autocomplete="off">
-          </label>
-
           <label class="model-field" id="model-modal-provider-field">
             <span class="field-label" data-i18n="settings.models.field.provider">Provider</span>
             <div class="custom-select-wrapper" id="model-modal-provider-wrapper">
@@ -939,6 +934,7 @@
               </div>
               <div class="custom-select-dropdown" id="model-modal-provider-dropdown"></div>
             </div>
+            <div id="model-modal-promo-hint" class="provider-promo-hint" data-index="modal"></div>
           </label>
 
           <label class="model-field">
@@ -984,6 +980,11 @@
           </label>
 
           <div id="model-modal-test-result" class="model-test-result"></div>
+
+          <label class="model-field model-field-checkbox" id="model-modal-default-field">
+            <input type="checkbox" id="model-modal-set-default">
+            <span data-i18n="settings.models.field.setDefault">Set as default model</span>
+          </label>
         </div>
         <div class="modal-footer">
           <button id="model-modal-cancel" class="btn-secondary" data-i18n="settings.models.btn.cancel">Cancel</button>

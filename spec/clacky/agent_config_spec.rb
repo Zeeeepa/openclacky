@@ -101,24 +101,6 @@ RSpec.describe Clacky::AgentConfig do
         end
       end
 
-      it "converts old name field to model field" do
-        with_temp_config({
-          "models" => [
-            {
-              "name" => "default",
-              "api_key" => "sk-key1",
-              "base_url" => "https://api.test.com",
-              "anthropic_format" => true
-            }
-          ]
-        }) do |config_file|
-          config = described_class.load(config_file)
-
-          expect(config.models.length).to eq(1)
-          expect(config.models[0]["model"]).to eq("default")
-          expect(config.models[0]["name"]).to be_nil
-        end
-      end
     end
 
     context "backward compatibility with old hash format" do

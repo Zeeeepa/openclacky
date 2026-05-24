@@ -908,7 +908,6 @@ module Clacky
     end
 
     # Parse models from config data
-    # Supports new top-level array format and old formats for backward compatibility
     private_class_method def self.parse_models(data)
       models = []
 
@@ -918,27 +917,13 @@ module Clacky
       if data.is_a?(Array)
         # New format: top-level array of model configurations
         models = data.map do |m|
-          # Deep copy to avoid shared references between models
-          m = m.dup.transform_values { |v| v.is_a?(String) ? v.dup : v }
-          # Convert old name-based format to new model-based format if needed
-          if m["name"] && !m["model"]
-            m["model"] = m["name"]
-            m.delete("name")
-          end
-          m
+          m.dup.transform_values { |v| v.is_a?(String) ? v.dup : v }
         end
       elsif data.is_a?(Hash) && data["models"]
         # Old format with "models:" key
         if data["models"].is_a?(Array)
           # Array under models key
-          models = data["models"].map do |m|
-            # Convert old name-based format to new model-based format
-            if m["name"] && !m["model"]
-              m["model"] = m["name"]
-              m.delete("name")
-            end
-            m
-          end
+          models = data["models"].map { |m| m }
         elsif data["models"].is_a?(Hash)
           # Hash format with tier names as keys (very old format)
           data["models"].each do |tier_name, config|

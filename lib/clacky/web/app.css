@@ -3341,6 +3341,21 @@ body {
   align-items: center;
   justify-content: space-between;
 }
+.model-field-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+.model-field-checkbox input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--color-accent-primary);
+}
 .field-label {
   font-size: 0.75rem;
   color: var(--color-text-secondary);
@@ -3549,6 +3564,15 @@ body {
   border-color: var(--color-border-secondary);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
+.model-card-grid-default {
+  border-color: var(--color-accent-primary);
+  background: var(--color-bg-tertiary);
+  box-shadow: 0 0 0 1px var(--color-accent-primary);
+}
+.model-card-grid-default:hover {
+  border-color: var(--color-accent-primary);
+  box-shadow: 0 2px 12px rgba(79, 70, 229, 0.15), 0 0 0 1px var(--color-accent-primary);
+}
 .model-card-grid-info {
   flex: 1;
   display: flex;
@@ -3745,6 +3769,10 @@ body {
 }
 .model-edit-modal-content {
   max-width: 500px;
+  overflow-y: auto;
+}
+.model-edit-modal-content .modal-body {
+  overflow-y: visible;
 }
 .modal-header {
   display: flex;
@@ -3952,8 +3980,9 @@ body {
   font-size: 0.75rem;
   flex: 1;
 }
-.result-ok   { color: var(--color-success); }
-.result-fail { color: var(--color-error); }
+.result-ok      { color: var(--color-success); }
+.result-fail    { color: var(--color-error); }
+.result-testing { color: var(--color-text-secondary); }
 .btn-save-model {
   font-size: 0.8125rem;
   padding: 0.375rem 1.125rem;

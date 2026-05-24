@@ -2787,7 +2787,6 @@ module Clacky
           {
             id:               m["id"],   # Stable runtime id — use this for switching
             index:            i,
-            name:             m["name"],
             model:            m["model"],
             base_url:         m["base_url"],
             api_key_masked:   mask_api_key(m["api_key"]),
@@ -2866,10 +2865,8 @@ module Clacky
           return json_response(res, 422, { error: "api_key is required" })
         end
 
-        name = body["name"].to_s.strip
         entry = {
           "id"               => SecureRandom.uuid,
-          "name"             => name.empty? ? nil : name,
           "model"            => model,
           "base_url"         => base_url,
           "api_key"          => api_key,
@@ -2923,10 +2920,6 @@ module Clacky
         target = @agent_config.models.find { |m| m["id"] == id }
         return json_response(res, 404, { error: "model not found" }) unless target
 
-        if body.key?("name")
-          v = body["name"].to_s.strip
-          target["name"] = v.empty? ? nil : v
-        end
         if body.key?("model")
           v = body["model"].to_s.strip
           target["model"] = v unless v.empty?
