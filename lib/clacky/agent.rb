@@ -218,6 +218,11 @@ module Clacky
       @config.effective_model_name
     end
 
+    private def current_provider
+      return nil unless @client.respond_to?(:provider_id)
+      @client.provider_id
+    end
+
     # Rename this session. Called by auto-naming (first message) or user explicit rename.
     def rename(new_name)
       @name = new_name.to_s.strip
@@ -248,6 +253,8 @@ module Clacky
       @task_cache_stats = {
         cache_creation_input_tokens: 0,
         cache_read_input_tokens: 0,
+        prompt_tokens: 0,
+        completion_tokens: 0,
         total_requests: 0,
         cache_hit_requests: 0
       }
@@ -381,6 +388,7 @@ module Clacky
 
       @hooks.trigger(:on_start, user_input)
 
+      result = nil
       begin
         # Track if request_user_feedback was called
         awaiting_user_feedback = false
@@ -583,7 +591,7 @@ module Clacky
         @pending_error_rollback = true if e.is_a?(Clacky::BadRequestError)
 
         # Build error result for session data, but let CLI handle error display
-        result = build_result(:error, error: e.message)  # rubocop:disable Lint/UselessAssignment
+        result = build_result(:error, error: e.message)
         raise
       ensure
         # Safety net: ensure any lingering progress spinner is stopped.
@@ -598,7 +606,7 @@ module Clacky
 
         # Fire-and-forget telemetry after every agent run.
         # Tracks daily active users (distinct devices per day) and task volume.
-        Clacky::Telemetry.task!
+        Clacky::Telemetry.task!(result: result)
       end
     end
 
@@ -1117,6 +1125,8 @@ module Clacky
       {
         status: status,
         session_id: @session_id,
+        model: current_model,
+        provider: current_provider,
         iterations: task_iterations,
         duration_seconds: Time.now - @start_time,
         total_cost_usd: task_cost.round(4),

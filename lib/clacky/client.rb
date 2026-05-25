@@ -8,6 +8,8 @@ module Clacky
     MAX_RETRIES = 10
     RETRY_DELAY = 5 # seconds
 
+    attr_reader :provider_id
+
     def initialize(api_key, base_url:, model:, anthropic_format: false)
       @api_key = api_key
       @base_url = base_url

@@ -86,6 +86,8 @@ module Clacky
         # Track cache usage for current task
         if @task_cache_stats
           @task_cache_stats[:total_requests] += 1
+          @task_cache_stats[:prompt_tokens] += usage[:prompt_tokens].to_i
+          @task_cache_stats[:completion_tokens] += usage[:completion_tokens].to_i
 
           if usage[:cache_creation_input_tokens]
             @task_cache_stats[:cache_creation_input_tokens] += usage[:cache_creation_input_tokens]
