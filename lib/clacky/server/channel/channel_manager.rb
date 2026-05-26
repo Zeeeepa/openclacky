@@ -163,17 +163,6 @@ module Clacky
         if config.enabled?(platform)
           @channel_config = config
           start_adapter(platform)
-          # Swap adapter reference in all ChannelUIControllers that still hold the old one.
-          # This ensures in-flight sessions send replies via the new adapter (fresh token).
-          new_adapter = @mutex.synchronize { @adapters.find { |a| a.platform_id == platform } }
-          if new_adapter
-            @registry.list.each do |summary|
-              @registry.with_session(summary[:id]) do |s|
-                cui = s[:channel_ui]
-                cui.swap_adapter(new_adapter) if cui&.platform == platform
-              end
-            end
-          end
           Clacky::Logger.info("[ChannelManager] :#{platform} adapter reloaded")
         else
           Clacky::Logger.info("[ChannelManager] :#{platform} disabled — adapter not started")

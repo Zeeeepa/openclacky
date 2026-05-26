@@ -31,13 +31,6 @@ module Clacky
         @mutex      = Mutex.new
       end
 
-      # Replace the adapter reference after a hot-reload.
-      # Called by ChannelManager#reload_platform so in-flight sessions
-      # use the new adapter (with fresh token) for outbound messages.
-      def swap_adapter(new_adapter)
-        @mutex.synchronize { @adapter = new_adapter }
-      end
-
       # Update the reply context for the current inbound message.
       # Called at the start of each route_message so replies are threaded correctly.
       # Also updates chat_id — a session may span multiple chats (e.g. same user
