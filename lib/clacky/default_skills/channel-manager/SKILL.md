@@ -341,6 +341,7 @@ Where `$QRCODE_ID` is the `qrcode_id` from Step 2's JSON output.
 
 Run this command with `timeout: 60`. If it doesn't succeed, **retry up to 3 times with the same `$QRCODE_ID`** — the QR code stays valid for 5 minutes. Only stop retrying if:
 - Exit code is 0 → success
+- Output contains "stale-session" → the qrcode_id was already consumed by a prior login; **immediately restart from Step 1** (do NOT retry with same id)
 - Output contains "expired" → QR expired, offer to restart from Step 1
 - Output contains "timed out" → offer to restart from Step 1
 - 3 retries exhausted → show error and offer to restart from Step 1

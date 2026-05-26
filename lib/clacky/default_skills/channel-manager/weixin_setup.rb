@@ -49,16 +49,20 @@ GIVEN_QRCODE_ID = QRCODE_ID_IDX ? ARGV[QRCODE_ID_IDX + 1] : nil
 # Logging (suppress in --fetch-qr mode so stdout is clean JSON)
 # ---------------------------------------------------------------------------
 
-def step(msg); $stderr.puts("[weixin-setup] #{msg}") unless FETCH_QR_MODE; end
-def ok(msg);   $stderr.puts("[weixin-setup] ✅ #{msg}") unless FETCH_QR_MODE; end
+WEIXIN_LOG_FILE = File.expand_path("~/.clacky/weixin_setup_debug.log")
+def wlog(msg)
+  File.open(WEIXIN_LOG_FILE, "a") { |f| f.puts("[#{Time.now.strftime("%H:%M:%S")}] #{msg}") }
+rescue StandardError
+  # ignore — debug log is best-effort
+end
+
+def step(msg); $stderr.puts("[weixin-setup] #{msg}") unless FETCH_QR_MODE; wlog(msg); end
+def ok(msg);   $stderr.puts("[weixin-setup] ✅ #{msg}") unless FETCH_QR_MODE; wlog("✅ #{msg}"); end
 
 # In fetch-qr mode, write to stderr so stdout stays clean JSON
 def log(msg)
-  if FETCH_QR_MODE
-    $stderr.puts("[weixin-setup] #{msg}")
-  else
-    $stderr.puts("[weixin-setup] #{msg}")
-  end
+  $stderr.puts("[weixin-setup] #{msg}")
+  wlog(msg)
 end
 
 def fail!(msg)
@@ -169,6 +173,7 @@ end
 def poll_until_confirmed(qrcode)
   deadline     = Time.now + LOGIN_DEADLINE_S
   scanned_once = false
+  started_at   = Time.now
 
   loop do
     fail!("Login timed out. Please run setup again.") if Time.now > deadline
@@ -179,7 +184,12 @@ def poll_until_confirmed(qrcode)
       timeout: QR_POLL_TIMEOUT_S
     )
 
-    next if resp.nil?  # read timeout = server-side long-poll ended, retry
+    if resp.nil?
+      wlog("poll: timeout/nil, retrying...")
+      next
+    end
+
+    wlog("poll response: #{resp.to_json}")
 
     case resp["status"]
     when "wait"
@@ -190,10 +200,19 @@ def poll_until_confirmed(qrcode)
         scanned_once = true
       end
     when "confirmed"
+      elapsed = Time.now - started_at
       token    = resp["bot_token"].to_s.strip
       base_url = resp["baseurl"].to_s.strip
       base_url = ILINK_BASE_URL if base_url.empty?
       fail!("Login confirmed but no token received") if token.empty?
+      # If confirmed arrived within 3 seconds of starting, this is almost certainly
+      # iLink returning the existing login state (account already logged in),
+      # not the result of the user scanning this QR code.
+      if elapsed < 3 && !scanned_once
+        wlog("confirmed too fast (#{elapsed.round(1)}s), treating as stale session")
+        fail!("[stale-session] QR session confirmed immediately — account already logged in. Run --fetch-qr to get a fresh QR code.")
+      end
+      wlog("confirmed after #{elapsed.round(1)}s")
       return { token: token, base_url: base_url }
     when "expired"
       fail!("QR code expired. Please run setup again.")
@@ -214,6 +233,7 @@ end
 if FETCH_QR_MODE
   $stderr.puts("[weixin-setup] Fetching QR code from iLink...")
   qr_resp = ilink_get("ilink/bot/get_bot_qrcode?bot_type=#{CGI.escape(BOT_TYPE)}")
+  wlog("fetch-qr response: #{qr_resp.to_json}")
   fail!("No qrcode in response: #{qr_resp.inspect}") unless qr_resp&.dig("qrcode")
 
   qrcode     = qr_resp["qrcode"]
