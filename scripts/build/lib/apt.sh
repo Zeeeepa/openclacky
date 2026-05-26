@@ -4,6 +4,76 @@
 # Sets-Vars: (none)
 # Include via: @include lib/apt.sh
 
+# Wait until apt/dpkg lock files are no longer held (e.g. by apt-daily on
+# freshly-booted WSL/Ubuntu). Uses flock(1) — the same mechanism apt uses —
+# rather than checking file existence (the lock files are always present;
+# advisory locks live in the kernel, not the filesystem).
+wait_apt_lock() {
+    [ "$DISTRO" = "ubuntu" ] || [ "$DISTRO" = "debian" ] || return 0
+
+    local locks=(
+        "/var/lib/dpkg/lock-frontend"
+        "/var/lib/dpkg/lock"
+        "/var/lib/apt/lists/lock"
+    )
+    local max_wait="${1:-120}"
+    local waited=0
+    local announced=false
+
+    while :; do
+        local busy=false
+        for f in "${locks[@]}"; do
+            [ -e "$f" ] || continue
+            if ! sudo flock -n "$f" -c true 2>/dev/null; then
+                busy=true
+                break
+            fi
+        done
+
+        [ "$busy" = false ] && break
+
+        if [ "$announced" = false ]; then
+            print_info "Waiting for system apt/dpkg to finish (up to ${max_wait}s)..."
+            announced=true
+        fi
+
+        if [ "$waited" -ge "$max_wait" ]; then
+            print_error "apt is still locked after ${max_wait}s."
+            print_info  "On WSL try: 'wsl --shutdown' from PowerShell, then rerun the installer."
+            return 1
+        fi
+
+        sleep 3
+        waited=$((waited + 3))
+    done
+
+    [ "$announced" = true ] && print_success "apt lock released"
+    return 0
+}
+
+# Run an apt-get subcommand with lock-wait + transient-failure retry.
+# Usage: apt_get_run update [-qq]
+#        apt_get_run install -y pkg1 pkg2
+apt_get_run() {
+    local attempts=3
+    local i=1
+    while [ "$i" -le "$attempts" ]; do
+        wait_apt_lock 120 || return 1
+        if sudo apt-get "$@"; then
+            return 0
+        fi
+        local rc=$?
+        if [ "$i" -lt "$attempts" ]; then
+            print_warning "apt-get $1 failed (exit $rc), retrying ($i/$((attempts-1)))..."
+            sleep 5
+        else
+            print_error "apt-get $1 failed after $attempts attempts."
+            return "$rc"
+        fi
+        i=$((i + 1))
+    done
+}
+
 # Configure apt mirror for CN region and run apt-get update.
 # Guards: only runs on ubuntu/debian ($DISTRO).
 # Relies on $USE_CN_MIRRORS set by detect_network_region (network.sh).
@@ -51,6 +121,6 @@ EOF
         print_info "Region: global — using default apt sources"
     fi
 
-    sudo apt-get update -qq
+    apt_get_run update -qq || return 1
     print_success "apt updated"
 }

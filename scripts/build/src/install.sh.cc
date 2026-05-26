@@ -34,7 +34,7 @@ ensure_ruby() {
 
     if is_linux_apt; then
         print_info "Installing Ruby via apt..."
-        sudo apt-get install -y ruby ruby-dev 2>/dev/null && check_ruby && return 0
+        apt_get_run install -y ruby ruby-dev 2>/dev/null && check_ruby && return 0
         print_warning "apt Ruby install failed or version too old"
     fi
 
