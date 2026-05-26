@@ -21,6 +21,7 @@ module Clacky
         install_browser.sh
         install_system_deps.sh
         install_rails_deps.sh
+        wsl_network_doctor.ps1
       ].freeze
 
       # Copy bundled scripts to ~/.clacky/scripts/ if missing or outdated.

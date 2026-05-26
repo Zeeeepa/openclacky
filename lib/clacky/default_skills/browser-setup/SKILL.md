@@ -111,6 +111,96 @@ chrome-devtools-mcp --version 2>/dev/null
 
 If still missing after user confirms, stop with error message.
 
+### Step 2.5 — WSL networking setup (only when session context shows `OS: WSL/Windows`)
+
+**Skip this entire step on macOS / Linux.** Look at the session context line that begins with `[Session context: ...]` — only run this step if it includes `OS: WSL/Windows`.
+
+#### Background (read this so you know what to do)
+
+The browser tool runs inside WSL but Chrome/Edge runs on Windows. By default WSL2 uses NAT networking, which means `127.0.0.1` inside WSL **cannot** reach Windows' Chrome debug port. The fix is to enable WSL2 **mirrored networking** (`networkingMode=mirrored` in `%USERPROFILE%\.wslconfig`), which makes WSL share Windows' network stack so `127.0.0.1` works directly.
+
+We have a helper script that handles all the Windows-side details:
+
+```
+~/.clacky/scripts/wsl_network_doctor.ps1
+```
+
+It exposes three subcommands:
+
+| Subcommand | What it does | Exit code |
+|---|---|---|
+| `status` | Check whether mirrored is configured (auto-passes on WSL1) | `0` OK / `10` NEED_ENABLE |
+| `enable` | Write `networkingMode=mirrored` to `.wslconfig` (does NOT shut down WSL) | `0` success / `1` fail |
+| `repair` | Restart Windows Host Network Service (HNS) via UAC prompt | `0` launched / `1` fail |
+
+Invoke it from WSL like this:
+
+```bash
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w ~/.clacky/scripts/wsl_network_doctor.ps1)" <subcommand>
+```
+
+#### Step 2.5.1 — Check status
+
+```bash
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w ~/.clacky/scripts/wsl_network_doctor.ps1)" status
+```
+
+- Exit `0` (output starts with `OK:`) → either mirrored is configured (WSL2) or
+  Ubuntu is running on WSL1 (which shares the Windows network stack and needs no
+  config). Either way, proceed to Step 3.
+- Exit `10` (output starts with `NEED_ENABLE:`) → continue to Step 2.5.2.
+- Any other failure → show the output to the user and ask them to retry. Stop here.
+
+#### Step 2.5.2 — Enable mirrored (only when NEED_ENABLE)
+
+Tell the user what's about to happen (in their language):
+
+> WSL doesn't have mirrored networking enabled yet — the browser tool needs it to reach Chrome on Windows.
+> I'll add one line to `%USERPROFILE%\.wslconfig`. Your current WSL session will NOT be restarted.
+
+Run:
+
+```bash
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w ~/.clacky/scripts/wsl_network_doctor.ps1)" enable
+```
+
+If the script exits `0`:
+
+> ✅ `.wslconfig` updated. Tell the user (in their language):
+>
+> The config takes effect only after WSL restarts, but we can't restart WSL from inside WSL.
+> Please:
+>
+> 1. Open **PowerShell** on Windows
+> 2. Run: `wsl --shutdown`
+> 3. Reopen the Clacky terminal
+> 4. Run `/browser-setup` again
+>
+> Stop here. Wait for the user to come back in a new session.
+
+If the script exits non-zero, show the output to the user and stop. Do NOT proceed to Step 3 — without mirrored networking the browser tool will not work.
+
+#### Step 2.5.3 — When to run repair
+
+Do NOT run `repair` proactively. Only run it later if **all** of the following are true:
+
+- `status` returned `OK` (mirrored is configured)
+- The user has restarted WSL since the config was written
+- Step 3's `browser(action="status")` still fails with a "Chrome/Edge is not running or remote debugging is not enabled" error
+
+In that situation, tell the user (in their language):
+
+> The config looks correct but the browser still can't connect. Windows Host Network Service may be stuck — I'll restart it.
+> **A Windows User Account Control (UAC) prompt will appear shortly. Please click "Yes".**
+
+Then run:
+
+```bash
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w ~/.clacky/scripts/wsl_network_doctor.ps1)" repair
+```
+
+After it returns, tell the user to run `wsl --shutdown` in PowerShell and reopen Clacky. Stop and wait.
+
 ### Step 3 — Verify Chrome/Edge is running with remote debugging
 
 **CRITICAL**: Do NOT attempt `browser()` calls yet. First check if the browser is reachable using the API:
