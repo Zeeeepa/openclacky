@@ -910,6 +910,17 @@ module Clacky
           # Inject working_dir so tools don't rely on Dir.chdir global state
           args[:working_dir] = @working_dir if @working_dir
 
+          # For terminal: stream live stdout chunks to the UI as they arrive,
+          # so the user sees real-time output (e.g. build logs) instead of a
+          # blank spinner. The UI buffers lines for Ctrl+O fullscreen view
+          # (CLI) and emits tool_stdout WS events (WebUI) that the browser
+          # appends to the running .tool-item.
+          if call[:name] == "terminal" && @ui.respond_to?(:show_tool_stdout)
+            args[:on_output] = ->(chunk) {
+              @ui.show_tool_stdout([chunk])
+            }
+          end
+
           # Show progress immediately for every tool execution so the user
           # always knows the agent is working. Using +with_progress+ wraps
           # the execution in an +ensure+ block so the spinner/ticker is

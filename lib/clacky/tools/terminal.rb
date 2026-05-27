@@ -199,7 +199,7 @@ module Clacky
       # ---------------------------------------------------------------------
       def execute(command: nil, session_id: nil, input: nil, background: false,
                   cwd: nil, env: nil, timeout: nil, kill: nil, idle_ms: nil,
-                  working_dir: nil, **_ignored)
+                  working_dir: nil, on_output: nil, **_ignored)
         # Auto-tune: if the caller didn't explicitly set a timeout/idle_ms
         # AND the command is a well-known long-runner (rspec, bundle install,
         # cargo build, etc.), we stretch the budget AND disable idle-return.
@@ -226,7 +226,7 @@ module Clacky
         # Continue / poll a running session
         if session_id
           return { error: "input is required when session_id is given" } if input.nil?
-          return do_continue(session_id.to_i, input.to_s, timeout: timeout, idle_ms: idle_ms)
+          return do_continue(session_id.to_i, input.to_s, timeout: timeout, idle_ms: idle_ms, on_output: on_output)
         end
 
         # Start a new command
@@ -243,7 +243,8 @@ module Clacky
           end
 
           return do_start(command.to_s, cwd: cwd, env: env, timeout: timeout,
-                          idle_ms: idle_ms, background: background ? true : false)
+                          idle_ms: idle_ms, background: background ? true : false,
+                          on_output: on_output)
         end
 
         { error: "terminal: must provide either `command`, or `session_id`+`input`, or `session_id`+`kill: true`." }
@@ -327,7 +328,7 @@ module Clacky
       # ---------------------------------------------------------------------
       # 1) Start a new command
       # ---------------------------------------------------------------------
-      private def do_start(command, cwd:, env:, timeout:, background:, idle_ms: DEFAULT_IDLE_MS)
+      private def do_start(command, cwd:, env:, timeout:, background:, idle_ms: DEFAULT_IDLE_MS, on_output: nil)
         if cwd && !Dir.exist?(cwd.to_s)
           return { error: "cwd does not exist: #{cwd}" }
         end
@@ -367,7 +368,8 @@ module Clacky
             background: true,
             persistent: false,
             original_command: command,
-            rewritten_command: safe_command
+            rewritten_command: safe_command,
+            on_output: on_output
           )
         end
 
@@ -392,14 +394,15 @@ module Clacky
           idle_ms: idle_ms,
           persistent: persistent,
           original_command: command,
-          rewritten_command: safe_command
+          rewritten_command: safe_command,
+          on_output: on_output
         )
       end
 
       # ---------------------------------------------------------------------
       # 2) Continue / poll an existing session
       # ---------------------------------------------------------------------
-      private def do_continue(session_id, input, timeout:, idle_ms: DEFAULT_IDLE_MS)
+      private def do_continue(session_id, input, timeout:, idle_ms: DEFAULT_IDLE_MS, on_output: nil)
         session = SessionManager.refresh(session_id)
         return { error: "Session ##{session_id} not found (already finished or killed)." } unless session
 
@@ -410,7 +413,7 @@ module Clacky
 
         session.mutex.synchronize { session.writer.write(normalize_input_for_pty(input.to_s)) } unless input.to_s.empty?
 
-        wait_and_package(session, timeout: timeout, idle_ms: idle_ms)
+        wait_and_package(session, timeout: timeout, idle_ms: idle_ms, on_output: on_output)
       end
 
       # `\n` is a Unix newline, not the "Enter key". Inside cooked-mode PTYs
@@ -459,10 +462,11 @@ module Clacky
       #   :timeout | session_id, state=timeout    | session_id, state=background
       private def wait_and_package(session, timeout:, idle_ms: DEFAULT_IDLE_MS,
                                    background: false, persistent: false,
-                                   original_command: nil, rewritten_command: nil)
+                                   original_command: nil, rewritten_command: nil,
+                                   on_output: nil)
         start_offset = session.read_offset
 
-        _before, code, state = read_until_marker(session, timeout: timeout, idle_ms: idle_ms)
+        _before, code, state = read_until_marker(session, timeout: timeout, idle_ms: idle_ms, on_output: on_output)
 
         new_offset = log_size(session)
         raw = read_log_slice(session.log_file, start_offset, new_offset)
@@ -1132,7 +1136,12 @@ module Clacky
       # Poll the log file until a marker matches, idle-return fires, or timeout.
       # Returns [raw_before_marker, exit_code_or_nil, state].
       # state ∈ :matched, :idle, :timeout, :eof
-      private def read_until_marker(session, timeout:, idle_ms: DEFAULT_IDLE_MS)
+      #
+      # `on_output` (optional Proc): called as on_output.call(chunk_string) for
+      # each new piece of output as it arrives, BEFORE the marker is detected.
+      # The chunk has ANSI codes / wrapper echoes stripped so it's safe to
+      # render in a UI. The completion marker itself is never passed through.
+      private def read_until_marker(session, timeout:, idle_ms: DEFAULT_IDLE_MS, on_output: nil)
         return ["", nil, :eof] unless session.marker_regex
 
         deadline    = Time.now + timeout
@@ -1140,14 +1149,87 @@ module Clacky
         start_size  = session.read_offset
         last_size   = start_size
         last_change = Time.now
+        streamed_to = start_size  # bytes already pushed to on_output
+        # Per-call streaming state: we hold back bytes until we see a \n so
+        # we can run cleaning on whole lines, then drop wrapper-echo lines.
+        stream_pending = +""
+        # Phase: until we observe the full `{ user_cmd; }; __clacky_ec=$?; printf "..." "$__clacky_ec"`
+        # wrapper echo (or decide it never came), buffer everything so the
+        # wrapper opener `{ ...` doesn't leak to the UI.
+        wrapper_swallowed = false
+
+        flush_stream = lambda do |raw, force_partial: false|
+          return unless on_output && raw && !raw.empty?
+          stream_pending << raw
+
+          # Phase 1: swallow the wrapper echo. The wrapper always ends with
+          # the literal printf tail `"$__clacky_ec"`. Until we see that, we
+          # accumulate; once we do, we strip the whole wrapper out and only
+          # emit whatever real output came after it.
+          unless wrapper_swallowed
+            tail_marker = '"$__clacky_ec"'
+            tail_idx = stream_pending.index(tail_marker)
+            if tail_idx
+              # Strip from start through end-of-line of the printf tail.
+              eol_after = stream_pending.index("\n", tail_idx) || (stream_pending.bytesize - 1)
+              stream_pending.replace(stream_pending.byteslice(eol_after + 1, stream_pending.bytesize - eol_after - 1).to_s)
+              wrapper_swallowed = true
+            elsif force_partial
+              # End of stream and we never saw the wrapper tail — give up
+              # on swallowing and emit what we have, run normal stripping.
+              wrapper_swallowed = true
+            else
+              # Still hunting; keep buffering. Emit nothing yet.
+              return
+            end
+          end
+
+          if force_partial
+            buffered = stream_pending.dup
+            stream_pending.clear
+          else
+            nl = stream_pending.rindex("\n")
+            return if nl.nil?
+            buffered = stream_pending.byteslice(0, nl + 1)
+            stream_pending.replace(stream_pending.byteslice(nl + 1, stream_pending.bytesize - nl - 1).to_s)
+          end
+          cleaned = OutputCleaner.clean(buffered)
+          # Strip any wrapper echo that still slipped through (e.g. when a
+          # session is reused and ZLE re-echoes our wrapper mid-stream).
+          cleaned = strip_command_echo(cleaned, marker_token: session.marker_token)
+          # Belt-and-braces: drop any line that still carries our internal
+          # tokens.
+          cleaned = cleaned.lines.reject do |ln|
+            ln.include?("__clacky_ec") ||
+              ln.include?("__CLACKY_DONE_") ||
+              ln.include?("__clacky_f") ||
+              ln.include?("__clacky_pc") ||
+              ln.match?(/\A\s*\}\s*>\s*\/dev\/null\s+2>&1;?\s*\z/)
+          end.join
+          on_output.call(cleaned) unless cleaned.empty?
+        rescue StandardError
+          # Streaming is best-effort — never let a UI bug abort the command.
+        end
 
         loop do
           current_size = log_size(session)
           if current_size > last_size
             slice = read_log_slice(session.log_file, session.read_offset, current_size)
             if (m = slice.match(session.marker_regex))
+              marker_abs = session.read_offset + m.begin(0)
+              if marker_abs > streamed_to
+                tail = read_log_slice(session.log_file, streamed_to, marker_abs)
+                flush_stream.call(tail, force_partial: true)
+              end
               return [slice[0...m.begin(0)], m[1].to_i, :matched]
             end
+
+            if current_size > streamed_to
+              new_chunk = read_log_slice(session.log_file, streamed_to, current_size)
+              flush_stream.call(new_chunk)
+              streamed_to = current_size
+            end
+
             last_size = current_size
             last_change = Time.now
           end
@@ -1156,16 +1238,31 @@ module Clacky
           if session.status == "exited" || session.status == "killed"
             slice = read_log_slice(session.log_file, session.read_offset, log_size(session))
             if (m = slice.match(session.marker_regex))
+              marker_abs = session.read_offset + m.begin(0)
+              if marker_abs > streamed_to
+                tail = read_log_slice(session.log_file, streamed_to, marker_abs)
+                flush_stream.call(tail, force_partial: true)
+              end
               return [slice[0...m.begin(0)], m[1].to_i, :matched]
+            end
+            final_size = log_size(session)
+            if final_size > streamed_to
+              flush_stream.call(read_log_slice(session.log_file, streamed_to, final_size), force_partial: true)
             end
             return [slice, nil, :eof]
           end
 
           if last_size > start_size && (Time.now - last_change) >= idle_sec
+            # Going idle: flush any partial buffered line (e.g. an in-progress
+            # progress bar without trailing \n) so the UI sees current state.
+            flush_stream.call("", force_partial: true) unless stream_pending.empty?
             return ["", nil, :idle]
           end
 
-          return ["", nil, :timeout] if Time.now >= deadline
+          if Time.now >= deadline
+            flush_stream.call("", force_partial: true) unless stream_pending.empty?
+            return ["", nil, :timeout]
+          end
           sleep 0.05
         end
       end

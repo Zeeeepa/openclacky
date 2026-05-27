@@ -442,6 +442,7 @@ module Clacky
         # doesn't bleed into the next one, and so the buffer is ready before
         # on_output starts firing (which can happen before show_progress is called).
         @stdout_lines = nil
+        @stdout_partial_tail = false
 
         # Special handling for request_user_feedback: render as a readable interactive card
         # with the full question and options, rather than the truncated format_call summary.
@@ -493,11 +494,27 @@ module Clacky
       # Receive a chunk of shell stdout from the on_output callback.
       # Lines are buffered into @stdout_lines so that Ctrl+O can open a
       # fullscreen live view, matching the original output_buffer interaction.
-      # @param lines [Array<String>] One or more stdout chunks
+      # @param lines [Array<String>] One or more stdout chunks (may contain
+      #   embedded newlines or be partial lines)
       def show_tool_stdout(lines)
         return if lines.nil? || lines.empty?
         @stdout_lines ||= []
-        @stdout_lines.concat(lines.map(&:chomp))
+        # Chunks may carry multiple newlines or trailing partial lines.
+        # Re-split on \n so the fullscreen view renders one logical line per row.
+        lines.each do |chunk|
+          next if chunk.nil? || chunk.empty?
+          chunk.to_s.split("\n", -1).each_with_index do |part, idx|
+            if idx == 0 && !@stdout_lines.empty? && @stdout_partial_tail
+              @stdout_lines[-1] = @stdout_lines[-1] + part
+            else
+              @stdout_lines << part
+            end
+          end
+          # Track whether the chunk ended on a partial line (no trailing \n)
+          # so the next chunk's first segment appends to it instead of
+          # starting a new row.
+          @stdout_partial_tail = !chunk.to_s.end_with?("\n")
+        end
       end
 
       # Show completion status (only for tasks with more than 5 iterations)
@@ -1354,6 +1371,7 @@ module Clacky
         # Also clear stdout buffer used by Ctrl+O (unrelated to progress, but
         # we don't want stale command output carried across user turns).
         @stdout_lines = nil
+        @stdout_partial_tail = false
 
         # Render user message immediately before running agent
         unless data[:text].empty? && data[:files].empty?

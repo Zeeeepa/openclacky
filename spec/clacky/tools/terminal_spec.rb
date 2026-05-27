@@ -770,7 +770,7 @@ RSpec.describe Clacky::Tools::Terminal do
       # actual run, only that auto-tuning kicked in — so we stub do_start
       # to return immediately.
       captured = {}
-      allow(tool).to receive(:do_start) do |_cmd, cwd:, env:, timeout:, idle_ms:, background:|
+      allow(tool).to receive(:do_start) do |_cmd, cwd:, env:, timeout:, idle_ms:, background:, on_output: nil|
         captured[:timeout] = timeout
         captured[:idle_ms] = idle_ms
         captured[:background] = background
@@ -786,7 +786,7 @@ RSpec.describe Clacky::Tools::Terminal do
 
     it "respects caller-supplied timeout/idle_ms even for slow commands" do
       captured = {}
-      allow(tool).to receive(:do_start) do |_cmd, cwd:, env:, timeout:, idle_ms:, background:|
+      allow(tool).to receive(:do_start) do |_cmd, cwd:, env:, timeout:, idle_ms:, background:, on_output: nil|
         captured[:timeout] = timeout
         captured[:idle_ms] = idle_ms
         { exit_code: 0, output: "", bytes_read: 0 }
@@ -800,7 +800,7 @@ RSpec.describe Clacky::Tools::Terminal do
 
     it "does NOT auto-tune background launches" do
       captured = {}
-      allow(tool).to receive(:do_start) do |_cmd, cwd:, env:, timeout:, idle_ms:, background:|
+      allow(tool).to receive(:do_start) do |_cmd, cwd:, env:, timeout:, idle_ms:, background:, on_output: nil|
         captured[:timeout] = timeout
         captured[:idle_ms] = idle_ms
         captured[:background] = background
