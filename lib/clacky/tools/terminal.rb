@@ -1166,20 +1166,26 @@ module Clacky
           # the literal printf tail `"$__clacky_ec"`. Until we see that, we
           # accumulate; once we do, we strip the whole wrapper out and only
           # emit whatever real output came after it.
+          #
+          # However, when stty -echo is active (the normal case for our
+          # persistent sessions), the wrapper is never echoed — so the tail
+          # marker never appears. We detect this by checking: if we have a
+          # complete line (\n present) and it does NOT contain the wrapper
+          # fingerprint, echo was suppressed and we can start streaming
+          # immediately.
           unless wrapper_swallowed
             tail_marker = '"$__clacky_ec"'
             tail_idx = stream_pending.index(tail_marker)
             if tail_idx
-              # Strip from start through end-of-line of the printf tail.
               eol_after = stream_pending.index("\n", tail_idx) || (stream_pending.bytesize - 1)
               stream_pending.replace(stream_pending.byteslice(eol_after + 1, stream_pending.bytesize - eol_after - 1).to_s)
               wrapper_swallowed = true
             elsif force_partial
-              # End of stream and we never saw the wrapper tail — give up
-              # on swallowing and emit what we have, run normal stripping.
+              wrapper_swallowed = true
+            elsif stream_pending.include?("\n") && !stream_pending.include?("__clacky_ec")
+              # stty -echo suppressed the wrapper echo; real output is arriving.
               wrapper_swallowed = true
             else
-              # Still hunting; keep buffering. Emit nothing yet.
               return
             end
           end
@@ -1206,7 +1212,12 @@ module Clacky
               ln.include?("__clacky_pc") ||
               ln.match?(/\A\s*\}\s*>\s*\/dev\/null\s+2>&1;?\s*\z/)
           end.join
-          on_output.call(cleaned) unless cleaned.empty?
+          # Collapse runs of 3+ blank lines into a single blank line so
+          # PTY noise (cursor-positioning codes cleaned to empty lines)
+          # doesn't produce a wall of whitespace in the streaming UI.
+          cleaned = cleaned.gsub(/\n{3,}/, "\n\n")
+          cleaned = cleaned.lstrip if cleaned.match?(/\A\n+\z/)
+          on_output.call(cleaned) unless cleaned.empty? || cleaned.match?(/\A\s*\z/)
         rescue StandardError
           # Streaming is best-effort — never let a UI bug abort the command.
         end
