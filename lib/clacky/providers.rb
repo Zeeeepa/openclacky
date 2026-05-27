@@ -350,6 +350,9 @@ module Clacky
           { "label" => "US (Virginia)",   "label_key" => "settings.models.baseurl.variant.us",            "base_url" => "https://dashscope-us.aliyuncs.com/compatible-mode/v1",   "region" => "us"   }.freeze
         ].freeze,
         "capabilities" => { "vision" => true }.freeze,
+        "model_capabilities" => {
+          "qwen3.7-max" => { "vision" => false }.freeze
+        }.freeze,
         "lite_models" => {
           "qwen3.7-max"      => "qwen3.6-flash",
           "qwen3.6-plus"     => "qwen3.6-flash",
