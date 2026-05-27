@@ -242,7 +242,7 @@ module Clacky
           { action: "tabs", success: true, profile: "user", output: format_tabs(pages), tabs: pages }
 
         when "snapshot"
-          raw  = mcp_call("take_snapshot")
+          raw  = mcp_call("take_snapshot", with_page({}))
           text = build_ai_snapshot(extract_snapshot(raw),
                                    interactive: opts[:interactive] || opts["interactive"],
                                    compact:     opts[:compact]     || opts["compact"],
@@ -352,7 +352,7 @@ module Clacky
             sleep(ms.to_i / 1000.0)
             return { action: "act", success: true, profile: "user", output: "Waited #{ms}ms" }
           elsif sel
-            mcp_call("wait_for", { text: [sel] })
+            mcp_call("wait_for", with_page({ text: [sel] }))
           else
             sleep(1)
           end
@@ -409,7 +409,7 @@ module Clacky
 
         call_args = { format: "png", fullPage: full_page }
         call_args[:uid] = uid if uid
-        result = mcp_call("take_screenshot", call_args)
+        result = mcp_call("take_screenshot", with_page(call_args))
 
         image_block = Array(result["content"]).find { |b| b.is_a?(Hash) && b["type"] == "image" }
 
