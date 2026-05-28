@@ -221,7 +221,7 @@ module Clacky
         # so they can call back into the server without hardcoding the port,
         # and use the correct product name without re-reading brand.yml.
         ENV["CLACKY_SERVER_PORT"]  = @port.to_s
-        ENV["CLACKY_SERVER_HOST"]  = (@host == "0.0.0.0" ? "127.0.0.1" : @host)
+        ENV["CLACKY_SERVER_HOST"]  = (@host == "0.0.0.0" ? detect_lan_ip : @host)
         product_name = Clacky::BrandConfig.load.product_name
         ENV["CLACKY_PRODUCT_NAME"] = (product_name.nil? || product_name.strip.empty?) ? "OpenClacky" : product_name
 
@@ -1202,6 +1202,15 @@ module Clacky
       # Returns true when the bind host is loopback-only.
       private def local_host?(host)
         ["127.0.0.1", "::1", "localhost"].include?(host.to_s.strip)
+      end
+
+      # Detect the first non-loopback IPv4 address for LAN accessibility.
+      # When binding 0.0.0.0 we need a reachable IP for URLs shown to the user
+      # (e.g. WeChat QR page link). Falls back to 127.0.0.1 when offline.
+      private def detect_lan_ip
+        Socket.ip_address_list
+          .select { |a| a.ipv4? && !a.ipv4_loopback? }
+          .first&.ip_address || "127.0.0.1"
       end
 
       # Resolve access key from CLACKY_ACCESS_KEY env var only.
