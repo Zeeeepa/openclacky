@@ -152,6 +152,8 @@ def save_to_server(token:, base_url:)
   http.open_timeout = 5
 
   req = Net::HTTP::Post.new(uri.path, "Content-Type" => "application/json")
+  access_key = ENV["CLACKY_ACCESS_KEY"].to_s.strip
+  req["Authorization"] = "Bearer #{access_key}" unless access_key.empty?
   req.body = body
 
   res  = http.request(req)

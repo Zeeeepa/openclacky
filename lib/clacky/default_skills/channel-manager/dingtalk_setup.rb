@@ -54,6 +54,8 @@ def server_post(path, body)
   uri = URI(CLACKY_SERVER_URL)
   Net::HTTP.start(uri.host, uri.port, open_timeout: 3, read_timeout: 10) do |h|
     req = Net::HTTP::Post.new(path, "Content-Type" => "application/json")
+    access_key = ENV["CLACKY_ACCESS_KEY"].to_s.strip
+    req["Authorization"] = "Bearer #{access_key}" unless access_key.empty?
     req.body = JSON.generate(body)
     h.request(req)
   end
@@ -62,7 +64,10 @@ end
 def server_get(path)
   uri = URI(CLACKY_SERVER_URL)
   Net::HTTP.start(uri.host, uri.port, open_timeout: 3, read_timeout: 10) do |h|
-    h.request(Net::HTTP::Get.new(path))
+    req = Net::HTTP::Get.new(path)
+    access_key = ENV["CLACKY_ACCESS_KEY"].to_s.strip
+    req["Authorization"] = "Bearer #{access_key}" unless access_key.empty?
+    h.request(req)
   end
 end
 

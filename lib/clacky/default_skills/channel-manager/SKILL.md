@@ -85,6 +85,28 @@ If the API is unreachable or returns an empty list: "No channels configured yet.
 
 ## `setup`
 
+### Step 0 — Detect access mode (MUST run first)
+
+**Run this command before anything else:**
+
+```bash
+echo $CLACKY_SERVER_HOST
+```
+
+Based on the output, determine your mode for the entire setup:
+
+- Output is `127.0.0.1`, `localhost`, or `::1` → **local mode** (browser automation available).
+- Otherwise (e.g. `192.168.x.x`, `10.x.x.x`) → **remote mode** (browser tool is FORBIDDEN).
+
+**Remote mode constraints:**
+1. Do NOT call `browser()` at any point — it controls the server's local Chrome which the remote user cannot see.
+2. Give URLs directly to the user instead.
+3. Skip Feishu Step 1 (automated script) — go straight to Step 2.
+4. Inform the user once:
+   > 检测到你正在通过局域网远程访问（`${CLACKY_SERVER_HOST}`）。浏览器自动化功能在远程模式下不可用，将直接使用手动引导模式——我会给你链接，你在自己的浏览器中操作即可。
+
+---
+
 Ask:
 > Which platform would you like to connect?
 >
@@ -100,6 +122,8 @@ Ask:
 ### Feishu setup
 
 #### Step 1 — Try automated setup (script)
+
+> **Remote mode: SKIP this entire Step 1. Jump directly to Step 2.** The automated script requires browser cookies from the server's local Chrome, which the remote user cannot access.
 
 Run the setup script (full path is available in the supporting files list above):
 ```bash
@@ -143,7 +167,8 @@ Only reach here if the automated script failed.
 
 ##### Phase 1 — Open Feishu Open Platform
 
-1. Navigate: `open https://open.feishu.cn/app`. Pass `isolated: true`.
+1. **Local mode**: Navigate: `open https://open.feishu.cn/app`. Pass `isolated: true`.
+   **Remote mode**: Do NOT call browser. Tell the user: "请在浏览器中打开 https://open.feishu.cn/app"
 2. If a login page or QR code is shown, tell the user to log in and wait for "done".
 3. Confirm the app list is visible.
 
@@ -269,7 +294,8 @@ When `lark-cli auth login` returns successfully, tell the user:
 
 ### WeCom setup
 
-1. Navigate: `open https://work.weixin.qq.com/wework_admin/frame#/aiHelper/create`. Pass `isolated: true`.
+1. **Local mode**: Navigate: `open https://work.weixin.qq.com/wework_admin/frame#/aiHelper/create`. Pass `isolated: true`.
+   **Remote mode**: Do NOT call browser. Tell the user: "请在浏览器中打开 https://work.weixin.qq.com/wework_admin/frame#/aiHelper/create"
 2. If a login page or QR code is shown, tell the user to log in and wait for "done".
 3. Guide the user: "Scroll to the bottom of the right panel and click 'API mode creation'. Reply done." Wait for "done".
 4. Guide the user: "Click 'Add' next to 'Visible Range'. Select the top-level company node. Click Confirm. Reply done." Wait for "done".
@@ -305,14 +331,28 @@ Parse the JSON output:
 
 If the output contains `"error"`, show it and stop.
 
-#### Step 2 — Show QR code to user (browser or manual fallback)
+#### Step 2 — Start polling AND show QR code to user
+
+> **CRITICAL TIMING**: The polling script MUST be started **before or simultaneously with** showing the QR to the user. The script needs to observe the `scaned` → `confirmed` transition; if it starts after the user already confirmed, the stale-session detector will false-positive and fail.
+
+**First — start the polling script** (run in background with `timeout: 120`):
+
+```bash
+ruby "SKILL_DIR/weixin_setup.rb" --qrcode-id "$QRCODE_ID"
+```
+
+Where `$QRCODE_ID` is the `qrcode_id` from Step 1's JSON output.
+
+**Then — show QR to the user:**
 
 Build the local QR page URL (include current Unix timestamp as `since` to detect new logins only):
 ```
 http://${CLACKY_SERVER_HOST}:${CLACKY_SERVER_PORT}/weixin-qr.html?url=<URL-encoded qrcode_url>&since=<current_unix_timestamp>
 ```
 
-**Try browser first** — attempt to open the QR page using the browser tool:
+**Remote mode**: Do NOT call browser(). Skip directly to the manual fallback below.
+
+**LOCAL mode — try browser first** — attempt to open the QR page using the browser tool:
 ```
 browser(action="navigate", url="<qr_page_url>")
 ```
@@ -320,26 +360,18 @@ browser(action="navigate", url="<qr_page_url>")
 **If browser succeeds:** Tell the user:
 > I've opened the WeChat QR code in your browser. Please scan it with WeChat, then confirm in the app.
 
-**If browser fails (not configured or unavailable):** Fall back to manual — tell the user:
+**If browser fails (not configured or unavailable), OR remote mode:** Fall back to manual — tell the user:
 > Please open the following link in your browser to scan the WeChat QR code:
 >
 > `http://${CLACKY_SERVER_HOST}:${CLACKY_SERVER_PORT}/weixin-qr.html?url=<URL-encoded qrcode_url>`
 >
-> Scan the QR code with WeChat, confirm in the app, then reply "done".
+> Scan the QR code with WeChat, then confirm in the app.
 
 The page renders a proper scannable QR code image. Do NOT open the raw `qrcode_url` directly — that page shows "请使用微信扫码打开" with no actual QR image.
 
-#### Step 3 — Wait for scan and save credentials
+#### Step 3 — Wait for polling result
 
-Once the browser shows the QR page, immediately run the polling script in the background:
-
-```bash
-ruby "SKILL_DIR/weixin_setup.rb" --qrcode-id "$QRCODE_ID"
-```
-
-Where `$QRCODE_ID` is the `qrcode_id` from Step 2's JSON output.
-
-Run this command with `timeout: 60`. If it doesn't succeed, **retry up to 3 times with the same `$QRCODE_ID`** — the QR code stays valid for 5 minutes. Only stop retrying if:
+The polling script is already running from Step 2. Check its output (it will exit on its own when confirmed or timed out). If it doesn't succeed, **retry up to 3 times with the same `$QRCODE_ID`** — the QR code stays valid for 5 minutes. Only stop retrying if:
 - Exit code is 0 → success
 - Output contains "stale-session" → the qrcode_id was already consumed by a prior login; **immediately restart from Step 1** (do NOT retry with same id)
 - Output contains "expired" → QR expired, offer to restart from Step 1
@@ -367,7 +399,9 @@ Get the portal URL from the script and open it in the browser:
 PORTAL_URL=$(ruby "SKILL_DIR/discord_setup.rb" --portal-url)
 ```
 
-Open it: `browser(action="navigate", url="<PORTAL_URL>")`. If the browser tool is not configured, invoke `browser-setup` first, then retry.
+**Local mode**: Open it: `browser(action="navigate", url="<PORTAL_URL>")`. If the browser tool is not configured, invoke `browser-setup` first, then retry.
+
+**Remote mode**: Do NOT call browser. Tell the user: "请在浏览器中打开以下链接：\n<PORTAL_URL>"
 
 #### Step 2 — Guide the user through the portal (one round-trip)
 
@@ -403,7 +437,10 @@ If the reply is malformed (missing either field), apologise briefly and ask agai
    ```bash
    ruby "SKILL_DIR/discord_setup.rb" --invite-url "<APP_ID>"
    ```
-   Open it: `browser(action="navigate", url="<INVITE_URL>")`. Tell the user:
+   **Local mode**: Open it: `browser(action="navigate", url="<INVITE_URL>")`.
+   **Remote mode**: Do NOT call browser. Tell the user: "请在浏览器中打开以下邀请链接：\n<INVITE_URL>"
+   
+   Tell the user:
    > Pick your server from the dropdown → **Continue** → **Authorize**. I'll detect when the bot joins.
    >
    > If the dropdown is empty, you don't have a server yet — open <https://discord.com/channels/@me>, click **Add a Server** (the **+** button on the left sidebar) → **Create My Own** → **For me and my friends** → name it → **Create**, then re-open the invite link.

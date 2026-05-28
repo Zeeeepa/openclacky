@@ -432,6 +432,8 @@ def run_setup(browser, api)
       req = method == :post \
         ? Net::HTTP::Post.new(path, "Content-Type" => "application/json") \
         : Net::HTTP::Get.new(path)
+      access_key = ENV["CLACKY_ACCESS_KEY"].to_s.strip
+      req["Authorization"] = "Bearer #{access_key}" unless access_key.empty?
       req.body = JSON.generate(body_hash) if body_hash
       h.request(req)
     end
