@@ -1507,7 +1507,6 @@ module Clacky
         return "" if lines.empty?
         lines.last(DISPLAY_TAIL_LINES).join("\n")
       end
-
       # WSL interop fix: Windows .exe processes inherit the PTY stdin fd
       # and try to use it as a Windows Console, which hangs indefinitely.
       # Detect .exe invocations and redirect stdin from /dev/null unless
@@ -1515,16 +1514,61 @@ module Clacky
       private def redirect_exe_stdin(command)
         return command unless Clacky::Utils::EnvironmentDetector.wsl?
         return command unless command =~ /\.exe\b/i
-        return command if command =~ /<\s*[^\s|&;]/
+        return command if shell_level_stdin_redirect?(command)
 
         # If the command has a shell-level pipe, insert </dev/null before
         # the first pipe so only the .exe segment gets its stdin redirected,
         # rather than starving a downstream pipe reader (e.g. `tr`, `grep`).
-        if command =~ /\|/
-          command.sub(/\s*\|/, ' </dev/null |')
+        if (pipe_index = first_shell_level_pipe_index(command))
+          "#{command[0...pipe_index].rstrip} </dev/null #{command[pipe_index..]}"
         else
           "#{command} </dev/null"
         end
+      end
+
+      private def shell_level_stdin_redirect?(command)
+        shell_level_char_index(command, "<") do |cmd, index|
+          next false if cmd[index + 1] == "<"
+          next false if index.positive? && cmd[index - 1] == "<"
+          true
+        end
+      end
+
+      private def first_shell_level_pipe_index(command)
+        shell_level_char_index(command, "|")
+      end
+
+      private def shell_level_char_index(command, target)
+        quote = nil
+        escaped = false
+
+        command.each_char.with_index do |char, index|
+          if escaped
+            escaped = false
+            next
+          end
+
+          if char == "\\"
+            escaped = true
+            next
+          end
+
+          if quote
+            quote = nil if char == quote
+            next
+          end
+
+          if char == "'" || char == '"'
+            quote = char
+            next
+          end
+
+          next unless char == target
+          return index unless block_given?
+          return index if yield(command, index)
+        end
+
+        nil
       end
 
       # PowerShell 5 on Chinese Windows defaults [Console]::OutputEncoding

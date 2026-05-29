@@ -897,6 +897,69 @@ RSpec.describe Clacky::Tools::Terminal do
     end
   end
 
+
+  describe "#redirect_exe_stdin" do
+    let(:terminal) { described_class.new }
+
+    def call(cmd)
+      terminal.send(:redirect_exe_stdin, cmd)
+    end
+
+    it "leaves commands unchanged outside WSL" do
+      allow(Clacky::Utils::EnvironmentDetector).to receive(:wsl?).and_return(false)
+
+      expect(call("cmd.exe /c dir")).to eq("cmd.exe /c dir")
+    end
+
+    context "on WSL" do
+      before do
+        allow(Clacky::Utils::EnvironmentDetector).to receive(:wsl?).and_return(true)
+      end
+
+      it "leaves non-.exe commands unchanged" do
+        expect(call("ls /tmp")).to eq("ls /tmp")
+      end
+
+      it "appends stdin redirect to a simple .exe command" do
+        expect(call("cmd.exe /c dir")).to eq("cmd.exe /c dir </dev/null")
+      end
+
+      it "inserts stdin redirect before a shell-level pipe" do
+        expect(call("foo.exe | grep bar")).to eq("foo.exe </dev/null | grep bar")
+      end
+
+      it "ignores pipes inside double-quoted PowerShell commands" do
+        cmd = %q{powershell.exe -Command "Get-ChildItem C:\Windows\System32 -File | Select-Object -First 3 Name"}
+        expect(call(cmd)).to eq(%q{powershell.exe -Command "Get-ChildItem C:\Windows\System32 -File | Select-Object -First 3 Name" </dev/null})
+      end
+
+      it "ignores pipes inside single quotes" do
+        cmd = %q{foo.exe 'left | right'}
+        expect(call(cmd)).to eq("foo.exe 'left | right' </dev/null")
+      end
+
+      it "ignores escaped pipes" do
+        cmd = %q{foo.exe left\|right}
+        expect(call(cmd)).to eq(%q{foo.exe left\|right} + " </dev/null")
+      end
+
+      it "does not inject when a shell-level stdin redirect already exists" do
+        cmd = "foo.exe < input.txt | grep bar"
+        expect(call(cmd)).to eq(cmd)
+      end
+
+      it "does not treat stdin-like text inside quotes as shell-level redirect" do
+        cmd = %q{foo.exe "left < right"}
+        expect(call(cmd)).to eq(%q{foo.exe "left < right" </dev/null})
+      end
+
+      it "keeps existing behaviour for shell-level || chains" do
+        expect(call("foo.exe || true")).to eq("foo.exe </dev/null || true")
+      end
+    end
+  end
+
+
   describe "#force_powershell_utf8" do
     let(:terminal) { described_class.new }
     def call(cmd)
