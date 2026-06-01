@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.8] - 2026-06-01
+
+### Added
+- Extensibility framework: patching, shell hooks, and channel user adapter plugins — customize Clacky behavior without modifying core code
+
+### Improved
+- Billing session list now shows session names, merged deleted sessions, and standardized token breakdown with cache hit/miss color coding
+
+### Fixed
+- Streaming LLM responses automatically retry when connection drops instead of silently truncating
+
+### More
+- Extend openclacky skill with additional extension points
+
 ## [1.2.7] - 2026-06-01
 
 ### Added
