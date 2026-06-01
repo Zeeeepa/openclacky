@@ -9018,11 +9018,10 @@ body.setup-mode[data-theme="dark"] {
   transition: height 0.2s ease;
 }
 .billing-cache-miss {
-  background: #3b82f6;
+  background: #f59e0b;
   width: 100%;
   transition: height 0.2s ease;
-}
-.billing-output-bar {
+}.billing-output-bar {
   width: 12px;
   background: #10b981;
   border-radius: 2px 2px 0 0;
@@ -9038,10 +9037,10 @@ body.setup-mode[data-theme="dark"] {
 }
 
 /* Legend colors */
+.billing-legend-total { background: #6366f1; }
 .billing-legend-cache-hit { background: #93c5fd; }
-.billing-legend-cache-miss { background: #3b82f6; }
+.billing-legend-cache-miss { background: #f59e0b; }
 .billing-legend-output { background: #10b981; }
-
 /* ── Chart Tooltip ───────────────────────────────────────────────────── */
 .billing-chart-tooltip {
   display: none;
@@ -9085,10 +9084,10 @@ body.setup-mode[data-theme="dark"] {
   border-radius: 50%;
   flex-shrink: 0;
 }
+.tooltip-total { background: #6366f1; }
 .tooltip-cache-hit { background: #93c5fd; }
-.tooltip-cache-miss { background: #3b82f6; }
-.tooltip-output { background: #10b981; }
-.tooltip-label {
+.tooltip-cache-miss { background: #f59e0b; }
+.tooltip-output { background: #10b981; }.tooltip-label {
   flex: 1;
   color: var(--color-text-secondary);
 }
@@ -9155,8 +9154,8 @@ body.setup-mode[data-theme="dark"] {
   border-radius: 3px;
   transition: width 0.3s ease;
 }
-.billing-bar-prompt {
-  background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%);
+.billing-bar-total {
+  background: linear-gradient(90deg, #6366f1 0%, #818cf8 100%);
 }
 .billing-bar-completion {
   background: linear-gradient(90deg, #10b981 0%, #34d399 100%);
@@ -9164,10 +9163,9 @@ body.setup-mode[data-theme="dark"] {
 .billing-bar-cache-read {
   background: linear-gradient(90deg, #93c5fd 0%, #bfdbfe 100%);
 }
-.billing-bar-cache-write {
-  background: linear-gradient(90deg, #6366f1 0%, #818cf8 100%);
+.billing-bar-cache-miss {
+  background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%);
 }
-
 /* ── Model List ──────────────────────────────────────────────────────── */
 .billing-model-list {
   display: flex;
@@ -9568,4 +9566,148 @@ body.setup-mode[data-theme="dark"] {
   font-size: 0.875rem;
   color: var(--color-text-secondary);
   font-weight: 500;
+}
+
+/* ── Sessions List ───────────────────────────────────────────────────── */
+.billing-sessions-row {
+  margin-top: 1rem;
+}
+.billing-sessions-section {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+.billing-sessions-section h3 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0 0 1rem 0;
+}
+.billing-sessions-empty {
+  text-align: center;
+  padding: 2rem;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+.billing-sessions-header {
+  display: grid;
+  grid-template-columns: 36px 1.5fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--color-bg-tertiary);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+.billing-sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.billing-session-row {
+  display: grid;
+  grid-template-columns: 36px 1.5fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  transition: background 0.15s;
+  align-items: center;
+}
+.billing-session-row:hover {
+  background: var(--color-bg-tertiary);
+}
+.billing-session-deleted {
+  opacity: 0.7;
+  border-left: 3px solid var(--color-warning);
+}
+.billing-session-deleted .billing-cell-main {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+.billing-cell {
+  font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.billing-cell-index {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+.billing-cell-session {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+.billing-cell-main {
+  font-weight: 500;
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.billing-cell-sub {
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.billing-cell-number {
+  font-family: var(--font-mono);
+  text-align: right;
+  color: var(--color-text-primary);
+}
+.billing-cell-hit {
+  color: #3b82f6;
+}
+.billing-cell-miss {
+  color: #f59e0b;
+}
+.billing-cell-cost {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--color-accent);
+  text-align: right;
+}
+.billing-cell-time {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+@media (max-width: 768px) {
+  .billing-sessions-header {
+    display: none;
+  }
+  .billing-session-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    padding: 1rem;
+  }
+  .billing-cell-index {
+    display: none;
+  }
+  .billing-cell-session {
+    grid-column: 1 / -1;
+  }
+  .billing-cell-number {
+    text-align: left;
+  }
+  .billing-cell-number::before {
+    font-size: 0.625rem;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    display: block;
+  }
+  .billing-cell-time {
+    grid-column: 1 / -1;
+    text-align: right;
+  }
 }

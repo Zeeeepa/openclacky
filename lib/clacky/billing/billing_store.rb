@@ -4,7 +4,7 @@ require "json"
 require "fileutils"
 require "securerandom"
 require_relative "billing_record"
-
+require_relative "../session_manager"
 module Clacky
   module Billing
     # Persistent storage for billing records using JSONL files
@@ -115,8 +115,112 @@ module Clacky
         }
       end
 
-      # Get daily cost breakdown for the last N days
-      # @param days [Integer] Number of days to include
+      # Get session-level summary statistics
+      # @param period [Symbol] :day, :week, :month, :year, or :all
+      # @param model [String, nil] Filter by model name
+      # @param limit [Integer] Maximum number of sessions to return
+      # @return [Array<Hash>] Session summaries sorted by cost descending
+      def session_summary(period: :month, model: nil, limit: 50)
+        from_time = period_start(period)
+        records = query(from: from_time, model: model)
+
+        # Load session names from session manager
+        session_names = load_session_names
+
+        # Group by session_id
+        by_session = records.group_by { |r| r.session_id || "unknown" }
+
+        active_sessions = []
+        deleted_records = []
+
+        by_session.each do |session_id, rs|
+          total_cost = rs.sum { |r| r.cost_usd || 0 }
+          total_prompt = rs.sum { |r| r.prompt_tokens || 0 }
+          total_completion = rs.sum { |r| r.completion_tokens || 0 }
+          total_cache_read = rs.sum { |r| r.cache_read_tokens || 0 }
+          total_cache_write = rs.sum { |r| r.cache_write_tokens || 0 }
+          first_record = rs.min_by { |r| r.timestamp }
+          last_record = rs.max_by { |r| r.timestamp }
+
+          entry = {
+            session_id: session_id,
+            session_name: session_names[session_id],
+            total_cost: total_cost.round(6),
+            total_tokens: total_prompt + total_completion,
+            prompt_tokens: total_prompt,
+            completion_tokens: total_completion,
+            cache_read_tokens: total_cache_read,
+            cache_write_tokens: total_cache_write,
+            requests: rs.size,
+            first_request: first_record&.timestamp&.iso8601,
+            last_request: last_record&.timestamp&.iso8601,
+            models: rs.map(&:model).uniq
+          }
+
+          if session_names[session_id]
+            active_sessions << entry
+          else
+            deleted_records << entry
+          end
+        end
+
+        # Merge all deleted sessions into a single row
+        if deleted_records.any?
+          merged = {
+            session_id: "_deleted_",
+            session_name: nil,
+            is_deleted: true,
+            total_cost: deleted_records.sum { |r| r[:total_cost] }.round(6),
+            total_tokens: deleted_records.sum { |r| r[:total_tokens] },
+            prompt_tokens: deleted_records.sum { |r| r[:prompt_tokens] },
+            completion_tokens: deleted_records.sum { |r| r[:completion_tokens] },
+            cache_read_tokens: deleted_records.sum { |r| r[:cache_read_tokens] },
+            cache_write_tokens: deleted_records.sum { |r| r[:cache_write_tokens] },
+            requests: deleted_records.sum { |r| r[:requests] },
+            first_request: deleted_records.map { |r| r[:first_request] }.compact.min,
+            last_request: deleted_records.map { |r| r[:last_request] }.compact.max,
+            models: deleted_records.flat_map { |r| r[:models] }.uniq
+          }
+          active_sessions << merged
+        end
+
+        # Sort by total cost descending
+        active_sessions.sort_by! { |s| -s[:total_cost] }
+
+        # Apply limit
+        limit ? active_sessions.first(limit) : active_sessions
+      end
+
+      # Load session names from session manager (including trashed sessions)
+      # Returns a hash mapping session_id to session name
+      def load_session_names
+        names = {}
+        begin
+          # Load from active sessions
+          manager = Clacky::SessionManager.new
+          manager.all_sessions.each do |session|
+            id = session[:session_id]
+            name = session[:name]
+            names[id] = name if id && name && !name.to_s.empty?
+          end
+
+          # Also load from trashed sessions
+          trash_dir = File.join(Dir.home, ".clacky", "trash", "sessions-trash")
+          if Dir.exist?(trash_dir)
+            Dir.glob(File.join(trash_dir, "*.json")).each do |filepath|
+              session = JSON.parse(File.read(filepath), symbolize_names: true) rescue next
+              id = session[:session_id]
+              name = session[:name]
+              names[id] = name if id && name && !name.to_s.empty?
+            end
+          end
+        rescue => e
+          # Silently fail if session manager is not available
+        end
+        names
+      end
+
+      # Get daily cost breakdown for the last N days      # @param days [Integer] Number of days to include
       # @param model [String, nil] Filter by model name
       # @return [Array<Hash>] Daily summaries with date and cost
       def daily_breakdown(days: 30, model: nil)

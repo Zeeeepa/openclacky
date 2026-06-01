@@ -436,8 +436,8 @@ module Clacky
         when ["GET",    "/api/billing/summary"]   then api_billing_summary(req, res)
         when ["GET",    "/api/billing/daily"]     then api_billing_daily(req, res)
         when ["GET",    "/api/billing/records"]   then api_billing_records(req, res)
-        when ["DELETE", "/api/billing/clear"]     then api_billing_clear(req, res)
-        when ["PATCH",  "/api/sessions/:id/model"] then api_switch_session_model(req, res)
+        when ["GET",    "/api/billing/sessions"]  then api_billing_sessions(req, res)
+        when ["DELETE", "/api/billing/clear"]     then api_billing_clear(req, res)        when ["PATCH",  "/api/sessions/:id/model"] then api_switch_session_model(req, res)
         when ["PATCH",  "/api/sessions/:id/working_dir"] then api_change_session_working_dir(req, res)
         else
           if method == "POST" && path.match?(%r{^/api/channels/[^/]+/send$})
@@ -1170,8 +1170,27 @@ module Clacky
         })
       end
 
-      # DELETE /api/billing/clear
-      # Clears billing records
+      # GET /api/billing/sessions
+      # Returns session-level billing summary
+      # Query params: period (day|week|month|year|all, default: month), model, limit
+      def api_billing_sessions(req, res)
+        require_relative "../billing/billing_store"
+
+        query = URI.decode_www_form(req.query_string.to_s).to_h
+        period = (query["period"] || "month").to_sym
+        model = query["model"]
+        limit = [(query["limit"] || "50").to_i, 200].min
+
+        store = Clacky::Billing::BillingStore.new
+        sessions = store.session_summary(period: period, model: model, limit: limit)
+
+        json_response(res, 200, {
+          sessions: sessions,
+          count: sessions.size
+        })
+      end
+
+      # DELETE /api/billing/clear      # Clears billing records
       # Query params: scope (today|all, default: today)
       def api_billing_clear(req, res)
         require_relative "../billing/billing_store"
