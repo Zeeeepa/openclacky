@@ -258,7 +258,16 @@ module Clacky
         response.env.body = sse_buf if response.body.to_s.empty?
         raise_error(response)
       end
-      MessageFormat::Bedrock.parse_response(aggregator.to_h)
+
+      result = aggregator.to_h
+      # A complete Converse stream always emits stopReason in its messageStop
+      # frame. Its absence means the upstream cut the stream mid-response,
+      # leaving a half-written message; retry rather than accept the truncation.
+      if result["stopReason"].nil?
+        raise Clacky::UpstreamTruncatedError,
+          "[LLM] Streaming response ended without stopReason (upstream cut the stream). Retrying..."
+      end
+      MessageFormat::Bedrock.parse_response(result)
     end
 
     def parse_simple_bedrock_response(response)
@@ -307,7 +316,16 @@ module Clacky
         recovered = Struct.new(:status, :body).new(response.status, recovered_body)
         raise_error(recovered)
       end
-      MessageFormat::Anthropic.parse_response(aggregator.to_h)
+
+      result = aggregator.to_h
+      # A complete Messages stream always emits stop_reason in its message_delta
+      # frame. Its absence means the upstream cut the stream mid-response,
+      # leaving a half-written message; retry rather than accept the truncation.
+      if result["stop_reason"].nil?
+        raise Clacky::UpstreamTruncatedError,
+          "[LLM] Streaming response ended without stop_reason (upstream cut the stream). Retrying..."
+      end
+      MessageFormat::Anthropic.parse_response(result)
     end
 
     def parse_simple_anthropic_response(response)
@@ -360,7 +378,18 @@ module Clacky
         response.env.body = sse_buf if response.body.to_s.empty?
         raise_error(response)
       end
-      MessageFormat::OpenAI.parse_response(aggregator.to_h)
+
+      result = aggregator.to_h
+      # A complete chat-completion stream always terminates with a frame
+      # carrying finish_reason. Its absence means the upstream cut the stream
+      # mid-response (e.g. proxy idle-timeout, connection reset that Faraday
+      # didn't surface as an exception), leaving a half-written message. Treat
+      # as retryable so we don't hand a silently truncated answer to the agent.
+      if result.dig("choices", 0, "finish_reason").nil?
+        raise Clacky::UpstreamTruncatedError,
+          "[LLM] Streaming response ended without finish_reason (upstream cut the stream). Retrying..."
+      end
+      MessageFormat::OpenAI.parse_response(result)
     end
 
     def parse_simple_openai_response(response)

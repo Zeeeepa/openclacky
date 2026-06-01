@@ -83,6 +83,7 @@ require_relative "clacky/idle_compression_timer"
 # Agent modules
 require_relative "clacky/agent/message_compressor"
 require_relative "clacky/agent/hook_manager"
+require_relative "clacky/shell_hook_loader"
 require_relative "clacky/agent/tool_registry"
 
 # UI modules
@@ -131,6 +132,11 @@ require_relative "clacky/server/session_registry"
 require_relative "clacky/server/web_ui_controller"
 require_relative "clacky/server/browser_manager"
 require_relative "clacky/cli"
+
+# Runtime patch layer: load user/AI patches from ~/.clacky/patches/ after all
+# gem code is defined, so fingerprints reflect the actual installed source.
+require_relative "clacky/patch_loader"
+Clacky::PatchLoader.load_all
 
 module Clacky
   class AgentInterrupted < Exception; end  # Inherit from Exception to bypass rescue StandardError

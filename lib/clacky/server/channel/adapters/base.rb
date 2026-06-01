@@ -15,6 +15,10 @@ module Clacky
         @registry[platform.to_sym]
       end
 
+      def self.unregister(platform)
+        @registry.delete(platform.to_sym)
+      end
+
       def self.all
         @registry.values
       end

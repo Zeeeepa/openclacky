@@ -137,6 +137,9 @@ module Clacky
       # Register built-in tools
       register_builtin_tools
 
+      # Load declarative shell hooks from ~/.clacky/hooks.yml
+      ShellHookLoader.load_into(@hooks)
+
       # Ensure user-space parsers are in place (~/.clacky/parsers/)
       Utils::ParserManager.setup!
 

@@ -942,6 +942,111 @@ module Clacky
     end
 
     # ── billing command ────────────────────────────────────────────────────────
+    desc "patch_new ID TARGET", "Scaffold a runtime patch for a method (TARGET like Clacky::Tools::WebSearch#execute)"
+    long_desc <<-LONGDESC
+      Generate a method-override patch under ~/.clacky/patches/ID/. The current
+      method fingerprint is computed automatically and stored in meta.yml; you
+      only edit the method body in patch.rb. If a future gem version changes the
+      targeted method, the fingerprint will no longer match and the patch is
+      auto-disabled on next start (rather than applied and risking breakage).
+
+      Examples:
+        $ clacky patch_new fix-search Clacky::Tools::WebSearch#execute -d "bump timeout"
+    LONGDESC
+    option :desc, type: :string, aliases: "-d", default: "", desc: "Short description"
+    def patch_new(id, target)
+      require_relative "patch_loader"
+      path = Clacky::PatchLoader.scaffold(id, target, description: options[:desc])
+      puts "Created patch: #{path}"
+      puts "Edit patch.rb, then run: clacky patch_verify"
+    rescue ArgumentError, StandardError => e
+      warn "Error: #{e.message}"
+      exit 1
+    end
+
+    desc "patch_verify", "Load ~/.clacky/patches/ and report applied / disabled / skipped"
+    def patch_verify
+      require "clacky"
+      result = Clacky::PatchLoader.last_result
+
+      if result.applied.empty? && result.disabled.empty? && result.skipped.empty?
+        puts "No patches found in ~/.clacky/patches/"
+        return
+      end
+
+      result.applied.each  { |id| puts "[OK]       #{id}" }
+      result.disabled.each { |(id, reason)| puts "[DISABLED] #{id} — #{reason}" }
+      result.skipped.each  { |(id, reason)| puts "[SKIP]     #{id} — #{reason}" }
+      exit 1 if result.skipped.any?
+    end
+
+    desc "patch_list", "List patches under ~/.clacky/patches/ and their status"
+    def patch_list
+      invoke :patch_verify, []
+    end
+
+    desc "hook_new", "Scaffold a starter ~/.clacky/hooks.yml with an example guard script"
+    def hook_new
+      require_relative "shell_hook_loader"
+      path = Clacky::ShellHookLoader.scaffold
+      puts "Created hooks config: #{path}"
+      puts "Edit it, then run: clacky hook_verify"
+    rescue ArgumentError => e
+      warn "Error: #{e.message}"
+      exit 1
+    end
+
+    desc "hook_verify", "Load ~/.clacky/hooks.yml and report which hooks register"
+    def hook_verify
+      require_relative "agent/hook_manager"
+      require_relative "shell_hook_loader"
+      hm = Clacky::HookManager.new
+      result = Clacky::ShellHookLoader.load_into(hm)
+
+      if result.registered.empty? && result.skipped.empty?
+        puts "No hooks found in ~/.clacky/hooks.yml"
+        return
+      end
+
+      result.registered.each { |(event, name)| puts "[OK]   #{event} → #{name}" }
+      result.skipped.each { |(name, reason)| puts "[SKIP] #{name} — #{reason}" }
+      exit 1 if result.skipped.any?
+    end
+
+    desc "channel_new NAME", "Scaffold a custom channel adapter at ~/.clacky/channels/NAME/"
+    long_desc <<-LONGDESC
+      Generate a ready-to-edit channel adapter skeleton. The skeleton already
+      self-registers and implements the full adapter interface with TODO markers —
+      you only fill in the method bodies, then run `clacky channel_verify`.
+
+      Examples:
+        $ clacky channel_new slack
+    LONGDESC
+    def channel_new(name)
+      require_relative "server/channel"
+      path = Clacky::Channel::Adapters::UserAdapterLoader.scaffold(name)
+      puts "Created channel adapter: #{path}"
+      puts "Edit the TODO sections, then run: clacky channel_verify"
+    rescue ArgumentError => e
+      warn "Error: #{e.message}"
+      exit 1
+    end
+
+    desc "channel_verify", "Load user channel adapters and report which are valid"
+    def channel_verify
+      require_relative "server/channel"
+      result = Clacky::Channel::Adapters::UserAdapterLoader.last_result
+
+      if result.loaded.empty? && result.skipped.empty?
+        puts "No custom channel adapters found in ~/.clacky/channels/"
+        return
+      end
+
+      result.loaded.each { |n| puts "[OK]   #{n}" }
+      result.skipped.each { |(n, reason)| puts "[SKIP] #{n} — #{reason}" }
+      exit 1 if result.skipped.any?
+    end
+
     desc "billing", "Show billing summary and usage statistics"
     long_desc <<-LONGDESC
       Display billing summary with token usage and cost breakdown.

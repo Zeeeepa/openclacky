@@ -31,3 +31,8 @@ require_relative "channel/adapters/dingtalk/adapter"
 require_relative "channel/channel_config"
 require_relative "channel/channel_ui_controller"
 require_relative "channel/channel_manager"
+
+# Discover and load user-defined adapters from ~/.clacky/channels/.
+# Must run after the bundled adapters so user adapters can extend or override.
+require_relative "channel/user_adapter_loader"
+Clacky::Channel::Adapters::UserAdapterLoader.load_all
