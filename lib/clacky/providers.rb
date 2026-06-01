@@ -41,6 +41,17 @@ module Clacky
           "dsk-deepseek-v4-flash",
           "or-gemini-3-1-pro"
         ],
+        # Image generation models served by the openclacky platform
+        # gateway. The gateway exposes a standard OpenAI-compatible
+        # /v1/images/generations endpoint, so the same OpenAICompat
+        # provider class handles them. `or-` prefix mirrors the chat
+        # model naming — these are routed through the OpenRouter
+        # backend by the platform.
+        "image_models" => [
+          "or-gemini-3-pro-image",
+          "or-gpt-image-2"
+        ],
+        "default_image_model" => "or-gpt-image-2",
         # Provider-level default: the Claude family served here is vision-capable.
         "capabilities" => { "vision" => true }.freeze,
         # Model-level overrides: DeepSeek models routed through this provider
@@ -123,6 +134,13 @@ module Clacky
           /\Aanthropic\// => "anthropic-messages",
           /\Aclaude[-.]/  => "anthropic-messages"
         }.freeze,
+        # Image generation via OpenRouter is currently routed through the
+        # openclacky platform gateway (see "openclacky" provider above) which
+        # handles the OpenRouter chat-completions + modalities translation.
+        # Direct OpenRouter image config is not exposed here — leave empty
+        # until we ship a dedicated client-side adapter for that protocol.
+        "image_models" => [],
+        "default_image_model" => nil,
         "website_url" => "https://openrouter.ai/keys"
       }.freeze,
 
@@ -305,6 +323,12 @@ module Clacky
           "gpt-5.5" => "gpt-5.4-mini",
           "gpt-5.4" => "gpt-5.4-mini"
         },
+        # OpenAI's image generation model — same /v1/images/generations
+        # endpoint, so the OpenAICompat image provider handles it.
+        "image_models" => [
+          "gpt-image-2"
+        ],
+        "default_image_model" => "gpt-image-2",
         "website_url" => "https://platform.openai.com/api-keys"
       }.freeze,
 
@@ -341,6 +365,8 @@ module Clacky
       }.freeze
 
     }.freeze
+
+    MEDIA_KINDS = %w[image video audio].freeze
 
     class << self
       # Check if a provider preset exists
@@ -444,6 +470,62 @@ module Clacky
       def models(provider_id)
         preset = PRESETS[provider_id]
         preset&.dig("models") || []
+      end
+
+      # Get available image generation models for a provider.
+      # Returns an empty array when the provider doesn't declare any —
+      # callers should treat that as "image generation not supported by this provider".
+      # @param provider_id [String] The provider identifier
+      # @return [Array<String>] List of image model names
+      def image_models(provider_id)
+        preset = PRESETS[provider_id]
+        preset&.dig("image_models") || []
+      end
+
+      # Video generation models — placeholder. No provider supports video
+      # via Clacky yet; once they do, declare "video_models" alongside
+      # "image_models" in the relevant PRESETS entry and this returns it.
+      def video_models(provider_id)
+        preset = PRESETS[provider_id]
+        preset&.dig("video_models") || []
+      end
+
+      # Audio generation models — same placeholder pattern as video_models.
+      def audio_models(provider_id)
+        preset = PRESETS[provider_id]
+        preset&.dig("audio_models") || []
+      end
+
+      # Unified entry for media model lookup by kind.
+      # @param provider_id [String]
+      # @param kind [String] one of "image" / "video" / "audio"
+      # @return [Array<String>]
+      def media_models(provider_id, kind)
+        case kind.to_s
+        when "image" then image_models(provider_id)
+        when "video" then video_models(provider_id)
+        when "audio" then audio_models(provider_id)
+        else []
+        end
+      end
+
+      # Default media model for a kind under a provider. Falls back to the
+      # first declared model when no explicit default is set in the preset.
+      # Used by AgentConfig#derive_media_models! to pick which model to
+      # surface when the user is on "auto" mode.
+      def default_media_model(provider_id, kind)
+        preset = PRESETS[provider_id]
+        return nil unless preset
+        explicit = preset["default_#{kind}_model"]
+        return explicit if explicit
+        media_models(provider_id, kind).first
+      end
+
+      # The set of media kinds Clacky knows about. Drives UI rendering and
+      # derivation loops — adding a new modality means listing it here plus
+      # adding the corresponding generator class.
+      def media_kinds
+        MEDIA_KINDS
       end
 
       # Get the lite model for a provider.

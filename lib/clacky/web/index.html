@@ -771,6 +771,17 @@
             </div>
             <div id="model-cards"></div>
           </section>
+
+          <!-- Media generation section -->
+          <section class="settings-section" id="media-section">
+            <div class="settings-section-title">
+              <span data-i18n="settings.media.title">Media Generation</span>
+            </div>
+            <div class="settings-section-desc" data-i18n="settings.media.desc">
+              Generate images, video, and audio using your configured providers. "Auto" follows your default chat model.
+            </div>
+            <div id="media-rows"></div>
+          </section>
         </div>
 
         <!-- ══ Tab: UI ══ -->
@@ -1052,8 +1063,8 @@
           <div id="model-modal-test-result" class="model-test-result"></div>
 
           <label class="model-field model-field-checkbox" id="model-modal-default-field">
-            <input type="checkbox" id="model-modal-set-default">
-            <span data-i18n="settings.models.field.setDefault">Set as default model</span>
+            <input type="checkbox" id="model-modal-set-default" class="field-checkbox">
+            <span class="field-label" data-i18n="settings.models.field.setDefault">Set as default model</span>
           </label>
         </div>
         <div class="modal-footer">
@@ -1288,6 +1299,7 @@
 <script src="/skills.js"></script>
 <script src="/channels.js"></script>
 <script src="/mcp.js"></script>
+<script src="/model-tester.js"></script>
 <script src="/settings.js"></script>
 <script src="/billing.js"></script>
 <script src="/onboard.js"></script>
