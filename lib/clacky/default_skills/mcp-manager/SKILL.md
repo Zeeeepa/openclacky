@@ -5,13 +5,6 @@ description: |
   reconfigure. Edits ~/.clacky/mcp.json so the user never writes JSON by hand.
   Trigger on: add mcp, install mcp, setup mcp, configure mcp, mcp list, mcp remove,
   mcp probe, mcp reconfigure.
-argument-hint: "add | list | probe <name> | remove <name> | reconfigure <name>"
-allowed-tools:
-  - Bash
-  - Read
-  - Write
-  - Edit
-  - AskFollowupQuestion
 ---
 
 # MCP Manager Skill
