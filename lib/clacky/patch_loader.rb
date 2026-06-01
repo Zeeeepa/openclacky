@@ -4,6 +4,13 @@ require "digest"
 require "fileutils"
 require "yaml"
 
+begin
+  require "prism"
+rescue LoadError
+  # Prism is a stdlib on Ruby 3.3+. On older Rubies we fall back to
+  # RubyVM::AbstractSyntaxTree (available since 2.6).
+end
+
 module Clacky
   # Runtime patch layer. Loads user/AI-authored patches from ~/.clacky/patches/
   # that override existing methods via Module#prepend, WITHOUT touching the
@@ -111,14 +118,59 @@ module Clacky
       # @raise [RuntimeError] if the target can't be resolved
       def fingerprint(target)
         meth = original_method(resolve_method(target))
-        node = RubyVM::AbstractSyntaxTree.of(meth)
-        raise "cannot read AST for #{target} (defined in C or eval?)" unless node
+        file, lineno = meth.source_location
+        raise "no source location for #{target} (defined in C or eval?)" unless file && lineno
 
-        file, = meth.source_location
-        raise "no source location for #{target}" unless file
+        first, last = method_line_range(file, lineno, meth.name, meth)
+        raise "cannot locate source for #{target} in #{file}:#{lineno}" unless first && last
 
-        lines = File.readlines(file)[(node.first_lineno - 1)...node.last_lineno]
+        lines = File.readlines(file)[(first - 1)...last]
         Digest::SHA256.hexdigest(lines.join)
+      end
+
+      def method_line_range(file, lineno, name, meth)
+        if defined?(Prism)
+          range = prism_line_range(file, lineno, name)
+          return range if range
+        end
+
+        ast_line_range(meth)
+      end
+
+      def prism_line_range(file, lineno, name)
+        result = Prism.parse_file(file)
+        return nil unless result.success?
+
+        node = find_def_at(result.value, lineno, name.to_sym)
+        return nil unless node
+
+        loc = node.location
+        [loc.start_line, loc.end_line]
+      end
+
+      def find_def_at(node, lineno, name)
+        return nil unless node
+
+        if node.is_a?(Prism::DefNode) && node.name == name && node.location.start_line == lineno
+          return node
+        end
+
+        node.compact_child_nodes.each do |child|
+          found = find_def_at(child, lineno, name)
+          return found if found
+        end
+        nil
+      end
+
+      def ast_line_range(meth)
+        return nil unless defined?(RubyVM::AbstractSyntaxTree)
+
+        node = RubyVM::AbstractSyntaxTree.of(meth)
+        return nil unless node
+
+        [node.first_lineno, node.last_lineno]
+      rescue StandardError
+        nil
       end
 
       # Walk past any methods introduced by our own patches (files under the

@@ -23,8 +23,8 @@ RSpec.describe Clacky::Channel::Adapters::UserAdapterLoader do
         module Channel
           module Adapters
             class #{const}Adapter < Base
-              def self.platform_id = :#{platform}
-              def self.platform_config(data) = {}
+              def self.platform_id; :#{platform}; end
+              def self.platform_config(data); {}; end
               def initialize(config); @config = config; end
               def start(&blk); end
               def stop; end
@@ -62,8 +62,8 @@ RSpec.describe Clacky::Channel::Adapters::UserAdapterLoader do
           module Channel
             module Adapters
               class BrokenAdapter < Base
-                def self.platform_id = :broken_one
-                def self.platform_config(data) = {}
+                def self.platform_id; :broken_one; end
+                def self.platform_config(data); {}; end
                 # missing: start, stop, send_text
                 Adapters.register(platform_id, self)
               end
