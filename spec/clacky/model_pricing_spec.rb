@@ -520,6 +520,83 @@ RSpec.describe Clacky::ModelPricing do
     end
   end
 
+  # Qwen (Alibaba DashScope) pricing - international list price (promo discounts
+  # are intentionally ignored for cost estimation). cache.write/read map to the
+  # official explicit-cache create/hit prices.
+  describe "Qwen pricing" do
+    it "bills qwen3.6-plus at official list prices" do
+      usage = {
+        prompt_tokens: 1_000_000,
+        completion_tokens: 1_000_000,
+        cache_read_input_tokens: 200_000
+      }
+      result = described_class.calculate_cost(model: "qwen3.6-plus", usage: usage)
+      # Regular input: (1_000_000 - 200_000)/1M * $0.50 = $0.40
+      # Cache read:     200_000 / 1M * $0.05            = $0.01
+      # Output:       1_000_000 / 1M * $3.00            = $3.00
+      # Total: $3.41
+      expect(result[:cost]).to be_within(0.0001).of(3.41)
+      expect(result[:source]).to eq(:price)
+    end
+
+    it "bills qwen3.7-max at the flat list rate, not tiered" do
+      result = described_class.calculate_cost(
+        model: "qwen3.7-max",
+        usage: { prompt_tokens: 1_000_000, completion_tokens: 1_000_000 }
+      )
+      # input 1M * $2.5 + output 1M * $7.5 = $10.00 (flat, no tier bump)
+      expect(result[:cost]).to be_within(0.0001).of(10.00)
+    end
+
+    it "bills qwen3.7-plus explicit cache create/hit at list rates" do
+      usage = {
+        prompt_tokens: 100_000,
+        completion_tokens: 0,
+        cache_creation_input_tokens: 100_000,
+        cache_read_input_tokens: 50_000
+      }
+      result = described_class.calculate_cost(model: "qwen3.7-plus", usage: usage)
+      # Regular input: (100_000 - 50_000)/1M * $0.4  = $0.020
+      # Cache write:    100_000 / 1M * $0.5          = $0.050
+      # Cache read:      50_000 / 1M * $0.04         = $0.002
+      # Total: $0.072
+      expect(result[:cost]).to be_within(0.0001).of(0.072)
+    end
+
+    it "falls back to input rate for models without explicit-cache pricing" do
+      usage = {
+        prompt_tokens: 100_000,
+        completion_tokens: 0,
+        cache_read_input_tokens: 50_000
+      }
+      result = described_class.calculate_cost(model: "qwen3.6-27b", usage: usage)
+      # Regular input: (100_000 - 50_000)/1M * $0.60 = $0.030
+      # Cache read:     50_000 / 1M * $0.60 (=input)  = $0.030
+      # Total: $0.060
+      expect(result[:cost]).to be_within(0.0001).of(0.060)
+    end
+
+    it "maps qwen3-vl-plus (renamed from qwen-vl-plus)" do
+      result = described_class.calculate_cost(
+        model: "qwen3-vl-plus",
+        usage: { prompt_tokens: 1_000_000, completion_tokens: 0 }
+      )
+      expect(result[:cost]).to be_within(0.0001).of(0.60)
+      expect(result[:source]).to eq(:price)
+    end
+
+    it "returns N/A for retired Qwen models (qwen3.7-flash, qwen-vl-plus, qwen-vl-max)" do
+      %w[qwen3.7-flash qwen-vl-plus qwen-vl-max].each do |m|
+        result = described_class.calculate_cost(
+          model: m,
+          usage: { prompt_tokens: 1_000_000, completion_tokens: 0 }
+        )
+        expect(result[:cost]).to be_nil,   "expected N/A for #{m}, got #{result[:cost]}"
+        expect(result[:source]).to be_nil, "expected nil source for #{m}"
+      end
+    end
+  end
+
   # Guards against accidentally billing unrelated model names at a
   # neighbouring model's rate — the anchored ^...$ regex in normalize_model_name
   # should reject fuzzy matches and fall through to nil (cost=N/A).

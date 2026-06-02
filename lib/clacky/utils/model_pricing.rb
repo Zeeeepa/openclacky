@@ -369,74 +369,85 @@ module Clacky
         cache:  { write: 0.30, read: 0.06 }
       },
 
-      # Qwen (Alibaba DashScope) — USD per 1M tokens, Singapore region list price.
-      # Source: Alibaba Cloud Model Studio international pricing.
-      # Cache convention (mirrors DeepSeek/Kimi/GLM "displayed ≤ actual"):
-      #   - DashScope has two cache modes; implicit is auto-on, explicit is opt-in.
-      #     Implicit: write @ 100% input, read @ 20% input (no setup, no guarantee)
-      #     Explicit: write @ 125% input, read @ 10% input (cache_control marker)
-      #   - We bill writes at the regular input rate (matches implicit, and avoids
-      #     surprising users with the explicit 25% surcharge).
-      #   - We bill reads at 20% (implicit rate) — the conservative side; users on
-      #     explicit caching will see real bills slightly *lower* than displayed.
+      # Qwen (Alibaba DashScope) - USD per 1M tokens, international (Singapore) list price.
+      # Source: Alibaba Cloud Model Studio international console per-model pages.
+      #
+      # Pricing convention:
+      #   - These rates are used for user-facing cost ESTIMATION, so we always use
+      #     the standard LIST price and intentionally ignore any limited-time promo
+      #     discounts. A promo lowers the user's actual bill, never raises it, so
+      #     estimating at list price keeps the estimate a safe upper bound and avoids
+      #     churn whenever a promo starts or ends.
+      #   - We record the model's LOWEST context tier (e.g. input<=256k / <=128k) as a
+      #     flat rate, since the global TIERED_PRICING_THRESHOLD is 200K and does not
+      #     match Qwen's per-model breakpoints.
+      #   - cache.write = official explicit-cache-create price.
+      #   - cache.read  = official explicit-cache-hit price.
+      #   - When a model has NO published explicit-cache price (e.g. qwen3.6-27b,
+      #     qwen-plus-latest), cache.write/read fall back to the input rate.
+      # qwen3.7-max: NOT tiered (single flat tier per Alibaba's definition).
+      #   List price: input 2.5, output 7.5, explicit write 3.125, explicit read 0.25.
       "qwen3.7-max" => {
-        input:  { default: 1.20, over_200k: 1.20 },
-        output: { default: 6.00, over_200k: 6.00 },
-        cache:  { write: 1.20, read: 0.24 }
+        input:  { default: 2.5, over_200k: 2.5 },
+        output: { default: 7.5, over_200k: 7.5 },
+        cache:  { write: 3.125, read: 0.25 }
       },
 
+      # qwen3.7-plus: list price (<=256k tier):
+      #   input 0.4, output 1.6, explicit write 0.5, explicit read 0.04.
       "qwen3.7-plus" => {
-        input:  { default: 0.40, over_200k: 0.40 },
-        output: { default: 2.40, over_200k: 2.40 },
-        cache:  { write: 0.40, read: 0.08 }
+        input:  { default: 0.4, over_200k: 0.4 },
+        output: { default: 1.6, over_200k: 1.6 },
+        cache:  { write: 0.5, read: 0.04 }
       },
 
-      "qwen3.7-flash" => {
-        input:  { default: 0.15, over_200k: 0.15 },
-        output: { default: 0.90, over_200k: 0.90 },
-        cache:  { write: 0.15, read: 0.03 }
-      },
-
+      # qwen3.6-plus: list price (<=256k tier). Official explicit-cache prices.
+      #   input 0.50, output 3.00, explicit write 0.625, explicit read 0.05
       "qwen3.6-plus" => {
-        input:  { default: 0.40, over_200k: 0.40 },
-        output: { default: 2.40, over_200k: 2.40 },
-        cache:  { write: 0.40, read: 0.08 }
+        input:  { default: 0.50, over_200k: 0.50 },
+        output: { default: 3.00, over_200k: 3.00 },
+        cache:  { write: 0.625, read: 0.05 }
       },
 
+      # qwen3.6-max (qwen3.6-max-preview): list price (<=128k tier).
+      #   input 1.30, output 7.80, explicit write 1.625, explicit read 0.13
       "qwen3.6-max" => {
-        input:  { default: 1.20, over_200k: 1.20 },
-        output: { default: 6.00, over_200k: 6.00 },
-        cache:  { write: 1.20, read: 0.24 }
+        input:  { default: 1.30, over_200k: 1.30 },
+        output: { default: 7.80, over_200k: 7.80 },
+        cache:  { write: 1.625, read: 0.13 }
       },
 
+      # qwen3.6-27b: list price, no explicit-cache pricing published.
+      #   Cache write/read fall back to the input rate (no cache discount).
       "qwen3.6-27b" => {
-        input:  { default: 0.20, over_200k: 0.20 },
-        output: { default: 0.80, over_200k: 0.80 },
-        cache:  { write: 0.20, read: 0.04 }
+        input:  { default: 0.60, over_200k: 0.60 },
+        output: { default: 3.60, over_200k: 3.60 },
+        cache:  { write: 0.60, read: 0.60 }
       },
 
+      # qwen3.6-flash: list price (<=256k tier).
+      #   input 0.25, output 1.50, explicit write 0.3125, explicit read 0.025
       "qwen3.6-flash" => {
-        input:  { default: 0.15, over_200k: 0.15 },
-        output: { default: 0.90, over_200k: 0.90 },
-        cache:  { write: 0.15, read: 0.03 }
+        input:  { default: 0.25, over_200k: 0.25 },
+        output: { default: 1.50, over_200k: 1.50 },
+        cache:  { write: 0.3125, read: 0.025 }
       },
 
+      # qwen-plus-latest: list price (<=256k tier), no explicit-cache pricing.
+      #   Cache write/read fall back to the input rate (no cache discount).
       "qwen-plus-latest" => {
         input:  { default: 0.40, over_200k: 0.40 },
         output: { default: 1.20, over_200k: 1.20 },
-        cache:  { write: 0.40, read: 0.08 }
+        cache:  { write: 0.40, read: 0.40 }
       },
 
-      "qwen-vl-plus" => {
-        input:  { default: 0.14, over_200k: 0.14 },
-        output: { default: 0.41, over_200k: 0.41 },
-        cache:  { write: 0.14, read: 0.028 }
-      },
-
-      "qwen-vl-max" => {
-        input:  { default: 0.52, over_200k: 0.52 },
-        output: { default: 2.08, over_200k: 2.08 },
-        cache:  { write: 0.52, read: 0.104 }
+      # qwen3-vl-plus: replaces the retiring qwen-vl-plus. List price
+      #   (128k<input<=256k tier). input 0.60, output 4.80,
+      #   explicit write 0.75, explicit read 0.06.
+      "qwen3-vl-plus" => {
+        input:  { default: 0.60, over_200k: 0.60 },
+        output: { default: 4.80, over_200k: 4.80 },
+        cache:  { write: 0.75, read: 0.06 }
       },
 
     }.freeze
@@ -606,14 +617,12 @@ module Clacky
         # Qwen (Alibaba DashScope) — strict anchored match per registered
         # model id in providers.rb. qwen3.7-* is the latest flagship line;
         # qwen3.6-* are the previous generation; qwen-plus-latest is the
-        # rolling alias for the latest Qwen-Plus release; qwen-vl-* are
-        # the multimodal SKUs.
+        # rolling alias for the latest Qwen-Plus release; qwen3-vl-plus is
+        # the multimodal SKU (replaces the retired qwen-vl-plus/max).
         when /^qwen3\.7-max$/i
           "qwen3.7-max"
         when /^qwen3\.7-plus$/i
           "qwen3.7-plus"
-        when /^qwen3\.7-flash$/i
-          "qwen3.7-flash"
         when /^qwen3\.6-plus$/i
           "qwen3.6-plus"
         when /^qwen3\.6-max$/i
@@ -624,10 +633,8 @@ module Clacky
           "qwen3.6-flash"
         when /^qwen-plus-latest$/i
           "qwen-plus-latest"
-        when /^qwen-vl-plus$/i
-          "qwen-vl-plus"
-        when /^qwen-vl-max$/i
-          "qwen-vl-max"
+        when /^qwen3-vl-plus$/i
+          "qwen3-vl-plus"
 
         # OpenAI GPT-5.x models — match various dashed/dotted/compact forms
         # (e.g. "gpt-5.5", "gpt-5-5", "gpt5.5", "gpt55")
