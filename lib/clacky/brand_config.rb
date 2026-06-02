@@ -783,6 +783,7 @@ module Clacky
 
       FileUtils.rm_f(tmp_zip)
 
+
       record_installed_skill(slug, version, skill_info["description"],
                              encrypted: encrypted,
                              description_zh: skill_info["description_zh"],

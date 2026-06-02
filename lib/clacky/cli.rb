@@ -53,6 +53,7 @@ module Clacky
     option :list, type: :boolean, aliases: "-l", desc: "List recent sessions"
     option :attach, type: :string, aliases: "-a", desc: "Attach to session by number or keyword"
     option :json, type: :boolean, default: false, desc: "Output NDJSON to stdout (for scripting/piping)"
+    option :ui, type: :string, default: nil, desc: "Interactive UI implementation: ui2, rich (default: ui2)"
     option :message, type: :string, aliases: "-m", desc: "Run non-interactively with this message and exit"
     option :file,  type: :array, aliases: "-f", desc: "File path(s) to attach (use with -m; supports images and documents)"
     option :image, type: :array, aliases: "-i", desc: "Image file path(s) to attach (alias for --file, kept for compatibility)"
@@ -725,27 +726,47 @@ module Clacky
         # Brand license check — must happen before UI2 starts (raw terminal mode conflict)
         check_brand_license_cli
 
-        # Detect terminal background BEFORE starting UI2 to avoid output interference
-        is_dark_bg = UI2::TerminalDetector.detect_dark_background
+        ui_name = (options[:ui] || ENV["OPENCLACKY_UI"] || "ui2").to_s
 
-        # Pass detected background mode to theme manager (singleton)
-        UI2::ThemeManager.instance.set_background_mode(is_dark_bg)
+        ui_controller = if ui_name == "rich"
+          if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("2.6.0")
+            say "Error: Rich UI requires Ruby >= 2.6. Use --ui ui2 on Ruby #{RUBY_VERSION}.", :red
+            exit 1
+          end
+          require_relative "rich_ui_controller"
+          RichUIController.new(
+            working_dir: working_dir,
+            mode: agent_config.permission_mode.to_s,
+            model: agent_config.model_name,
+            theme: options[:theme]
+          )
+        else
+          unless ui_name == "ui2"
+            say "Error: Unknown UI '#{ui_name}'. Available UIs: ui2, rich", :red
+            exit 1
+          end
+          # Detect terminal background BEFORE starting UI2 to avoid output interference
+          is_dark_bg = UI2::TerminalDetector.detect_dark_background
 
-        # Validate theme
-        theme_name = options[:theme] || "hacker"
-        available_themes = UI2::ThemeManager.available_themes.map(&:to_s)
-        unless available_themes.include?(theme_name)
-          say "Error: Unknown theme '#{theme_name}'. Available themes: #{available_themes.join(', ')}", :red
-          exit 1
+          # Pass detected background mode to theme manager (singleton)
+          UI2::ThemeManager.instance.set_background_mode(is_dark_bg)
+
+          # Validate theme
+          theme_name = options[:theme] || "hacker"
+          available_themes = UI2::ThemeManager.available_themes.map(&:to_s)
+          unless available_themes.include?(theme_name)
+            say "Error: Unknown theme '#{theme_name}'. Available themes: #{available_themes.join(', ')}", :red
+            exit 1
+          end
+
+          # Create UI2 controller with configuration
+          UI2::UIController.new(
+            working_dir: working_dir,
+            mode: agent_config.permission_mode.to_s,
+            model: agent_config.model_name,
+            theme: theme_name
+          )
         end
-
-        # Create UI2 controller with configuration
-        ui_controller = UI2::UIController.new(
-          working_dir: working_dir,
-          mode: agent_config.permission_mode.to_s,
-          model: agent_config.model_name,
-          theme: theme_name
-        )
 
         # Inject UI into agent
         agent.instance_variable_set(:@ui, ui_controller)
@@ -758,6 +779,7 @@ module Clacky
 
         # Track current working thread (agent or idle compression that can be interrupted)
         current_task_thread = nil
+        shutting_down = false
 
         # Idle compression timer - triggers compression after 180s of inactivity
         idle_timer = Clacky::IdleCompressionTimer.new(
@@ -816,7 +838,9 @@ module Clacky
             end
 
             # Stop UI and exit
-            ui_controller.stop
+            shutting_down = true
+            idle_timer.shutdown
+            ui_controller.stop(clear_screen: true)
             exit(0)
           end
 
@@ -867,7 +891,9 @@ module Clacky
             ui_controller.update_todos([])
             next
           when "/exit", "/quit"
-            ui_controller.stop
+            shutting_down = true
+            idle_timer.shutdown
+            ui_controller.stop(clear_screen: true)
             exit(0)
           when "/help"
             sleep 0.1
@@ -909,7 +935,7 @@ module Clacky
             ensure
               current_task_thread = nil
               # Start idle timer after agent completes
-              idle_timer.start
+              idle_timer.start unless shutting_down
             end
           end
         end
@@ -928,7 +954,8 @@ module Clacky
         ui_controller.start_input_loop
 
         # Cleanup: kill any running threads
-        idle_timer.cancel
+        shutting_down = true
+        idle_timer.shutdown
         current_task_thread&.kill
 
         # Save final session state
