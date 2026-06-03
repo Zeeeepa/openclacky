@@ -583,6 +583,9 @@ module Clacky
           "exceeds the maximum context",    # Portkey & generic gateways
           "exceeds the model's context",    # Generic
           "exceeds the model's maximum",    # Generic
+          "exceeds the available context",  # llama.cpp / llama-server
+          "available context size",         # llama.cpp / llama-server variant
+          "try increasing it",              # llama.cpp action hint (server.cpp)
           "reduce the length of the input", # Qwen action hint
           "reduce the length of the messages", # OpenAI action hint
           "reduce the length of your",      # Generic action hint

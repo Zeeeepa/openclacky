@@ -1138,4 +1138,46 @@ RSpec.describe Clacky::AgentConfig do
       end
     end
   end
+
+  describe "#compression_threshold" do
+    it "defaults to AgentConfig::DEFAULT_COMPRESSION_THRESHOLD" do
+      config = described_class.new(models: [])
+      expect(config.compression_threshold).to eq(described_class::DEFAULT_COMPRESSION_THRESHOLD)
+    end
+
+    it "is settable through the constructor" do
+      config = described_class.new(models: [], compression_threshold: 50_000)
+      expect(config.compression_threshold).to eq(50_000)
+    end
+
+    it "round-trips through YAML save/load" do
+      with_temp_config do |config_file|
+        described_class.new(models: [], compression_threshold: 48_000).save(config_file)
+
+        loaded = described_class.load(config_file)
+        expect(loaded.compression_threshold).to eq(48_000)
+      end
+    end
+  end
+
+  describe "#message_count_threshold" do
+    it "defaults to AgentConfig::DEFAULT_MESSAGE_COUNT_THRESHOLD" do
+      config = described_class.new(models: [])
+      expect(config.message_count_threshold).to eq(described_class::DEFAULT_MESSAGE_COUNT_THRESHOLD)
+    end
+
+    it "is settable through the constructor" do
+      config = described_class.new(models: [], message_count_threshold: 50)
+      expect(config.message_count_threshold).to eq(50)
+    end
+
+    it "round-trips through YAML save/load" do
+      with_temp_config do |config_file|
+        described_class.new(models: [], message_count_threshold: 75).save(config_file)
+
+        loaded = described_class.load(config_file)
+        expect(loaded.message_count_threshold).to eq(75)
+      end
+    end
+  end
 end

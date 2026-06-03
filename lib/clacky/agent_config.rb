@@ -151,8 +151,16 @@ module Clacky
 
     PERMISSION_MODES = [:auto_approve, :confirm_safes, :confirm_all].freeze
 
+    # Conversation-history compression defaults. Both are user-configurable
+    # via `settings.compression_threshold` / `settings.message_count_threshold`
+    # in ~/.clacky/config.yml — local-model users (llama.cpp / ollama / vllm)
+    # typically lower compression_threshold to fit their server's context window.
+    DEFAULT_COMPRESSION_THRESHOLD = 150_000
+    DEFAULT_MESSAGE_COUNT_THRESHOLD = 200
+
     attr_accessor :permission_mode, :max_tokens, :verbose,
                   :enable_compression, :enable_prompt_caching,
+                  :compression_threshold, :message_count_threshold,
                   :models, :current_model_index, :current_model_id,
                   :memory_update_enabled, :skill_evolution,
                   :max_running_agents, :max_idle_agents,
@@ -165,6 +173,13 @@ module Clacky
       @enable_compression = options[:enable_compression].nil? ? true : options[:enable_compression]
       # Enable prompt caching by default for cost savings
       @enable_prompt_caching = options[:enable_prompt_caching].nil? ? true : options[:enable_prompt_caching]
+      # Token threshold that triggers proactive history compression. Local models
+      # (llama.cpp, ollama, vllm) often have small context windows (e.g. 64k);
+      # users with such setups should lower this to avoid hitting the server-side ceiling.
+      @compression_threshold = options[:compression_threshold] || DEFAULT_COMPRESSION_THRESHOLD
+      # Message-count threshold that also triggers compression, independent of token count.
+      # Guards against pathological histories with many tiny messages.
+      @message_count_threshold = options[:message_count_threshold] || DEFAULT_MESSAGE_COUNT_THRESHOLD
 
       # Models configuration
       @models = options[:models] || []
@@ -387,7 +402,9 @@ module Clacky
     # Settings keys that are persisted to config.yml.
     # These map directly to AgentConfig accessors.
     CONFIG_SETTINGS_KEYS = %w[
-      enable_compression enable_prompt_caching memory_update_enabled
+      enable_compression enable_prompt_caching
+      compression_threshold message_count_threshold
+      memory_update_enabled
       skill_evolution max_running_agents max_idle_agents
       default_working_dir
     ].freeze
@@ -402,6 +419,8 @@ module Clacky
       settings = {
         "enable_compression" => @enable_compression,
         "enable_prompt_caching" => @enable_prompt_caching,
+        "compression_threshold" => @compression_threshold,
+        "message_count_threshold" => @message_count_threshold,
         "memory_update_enabled" => @memory_update_enabled,
         "skill_evolution" => @skill_evolution,
         "max_running_agents" => @max_running_agents,

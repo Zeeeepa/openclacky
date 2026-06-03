@@ -415,7 +415,7 @@ RSpec.describe Clacky::Agent do
 
       initial_count = compression_agent.history.size
 
-      # Verify we have enough messages to trigger compression (MESSAGE_COUNT_THRESHOLD = 200)
+      # Verify we have enough messages to trigger compression (default message_count_threshold = 200)
       expect(initial_count).to be >= 200
 
       # Mock LLM response: first call is compression, returns compressed summary
@@ -471,6 +471,65 @@ RSpec.describe Clacky::Agent do
       final_count = no_compression_agent.history.size
 
       expect(final_count).to eq(initial_count) # No compression when disabled
+    end
+
+    it "respects a custom compression_threshold from config" do
+      allow(client).to receive(:send_messages_with_tools)
+        .and_return(mock_api_response(content: "<summary>compacted</summary>"))
+
+      low_threshold_config = Clacky::AgentConfig.new(
+        model: "local-llama",
+        permission_mode: :auto_approve,
+        enable_compression: true,
+        compression_threshold: 5_000
+      )
+      agent = described_class.new(
+        client, low_threshold_config,
+        working_dir: Dir.pwd, ui: nil,
+        profile: "coding", session_id: Clacky::SessionManager.generate_id, source: :manual
+      )
+
+      agent.history.append({ role: "system", content: "System prompt" })
+      # 50 round-trips * ~250 tokens each ≈ ~12k tokens — well above 5k but
+      # far below the 150k default. Without the override this would NOT
+      # trigger; with the override it MUST.
+      50.times do |i|
+        agent.history.append({ role: "user", content: "User turn #{i}: " + ("x" * 800) })
+        agent.history.append({ role: "assistant", content: "Assistant turn #{i}: " + ("y" * 800) })
+      end
+
+      initial_count = agent.history.size
+      ctx = agent.send(:compress_messages_if_needed)
+
+      expect(ctx).not_to be_nil
+      expect(initial_count).to be < 200 # confirms message-count threshold did NOT fire
+    end
+
+    it "respects a custom message_count_threshold from config" do
+      allow(client).to receive(:send_messages_with_tools)
+        .and_return(mock_api_response(content: "<summary>compacted</summary>"))
+
+      low_count_config = Clacky::AgentConfig.new(
+        model: "local-llama",
+        permission_mode: :auto_approve,
+        enable_compression: true,
+        message_count_threshold: 30
+      )
+      agent = described_class.new(
+        client, low_count_config,
+        working_dir: Dir.pwd, ui: nil,
+        profile: "coding", session_id: Clacky::SessionManager.generate_id, source: :manual
+      )
+
+      agent.history.append({ role: "system", content: "System prompt" })
+      # 40 short messages — well below the 150k token default but above the
+      # custom 30-message threshold.
+      40.times do |i|
+        agent.history.append({ role: "user", content: "hi #{i}" })
+      end
+
+      ctx = agent.send(:compress_messages_if_needed)
+      expect(ctx).not_to be_nil
     end
 
     it "preserves all tool results when assistant has multiple tool_calls" do

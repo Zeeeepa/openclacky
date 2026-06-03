@@ -5,9 +5,10 @@ module Clacky
     # Message compression functionality for managing conversation history
     # Handles automatic compression when token limits are exceeded
     module MessageCompressorHelper
-      # Compression thresholds
-      COMPRESSION_THRESHOLD = 150_000  # Trigger compression when exceeding this (in tokens)
-      MESSAGE_COUNT_THRESHOLD = 200   # Trigger compression when exceeding this (in message count)
+      # Compression behavior knobs.
+      # Token & message-count thresholds are owned by AgentConfig — see
+      # AgentConfig::DEFAULT_COMPRESSION_THRESHOLD / DEFAULT_MESSAGE_COUNT_THRESHOLD.
+      # The constants below are tuning parameters not currently exposed as user config.
       MAX_RECENT_MESSAGES = 20  # Keep this many recent message pairs intact
       TARGET_COMPRESSED_TOKENS = 10_000  # Target size after compression
       IDLE_COMPRESSION_THRESHOLD = 20_000  # Minimum messages needed for idle compression
@@ -141,8 +142,8 @@ module Clacky
         else
           # Normal compression - check thresholds
           # Either: token count exceeds threshold OR message count exceeds threshold
-          token_threshold_exceeded = total_tokens >= COMPRESSION_THRESHOLD
-          message_count_exceeded = message_count >= MESSAGE_COUNT_THRESHOLD
+          token_threshold_exceeded = total_tokens >= @config.compression_threshold
+          message_count_exceeded = message_count >= @config.message_count_threshold
 
           # Only compress if we exceed at least one threshold
           return nil unless token_threshold_exceeded || message_count_exceeded

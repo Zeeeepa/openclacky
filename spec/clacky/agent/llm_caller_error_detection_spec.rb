@@ -63,7 +63,13 @@ RSpec.describe Clacky::Agent::LlmCaller do
         "is 65536 tokens. Your input has 80000 tokens.",
 
       "Kimi 'input length exceeds'" =>
-        "[LLM] Client request error: input length exceeds maximum context length: 200000"
+        "[LLM] Client request error: input length exceeds maximum context length: 200000",
+
+      # llama.cpp / llama-server — real wording from server.cpp source.
+      # Customer-reported in https://github.com/clacky-ai/openclacky/issues/250
+      "llama.cpp / llama-server (customer report)" =>
+        "[LLM] Client request error: request (65618 tokens) exceeds the " \
+        "available context size (65536 tokens), try increasing it"
     }.freeze
 
     PROVIDER_ERRORS.each do |label, raw_message|
