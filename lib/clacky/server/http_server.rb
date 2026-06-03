@@ -223,8 +223,10 @@ module Clacky
         # Expose server address and brand name to all child processes (skill scripts, shell commands, etc.)
         # so they can call back into the server without hardcoding the port,
         # and use the correct product name without re-reading brand.yml.
+        # CLACKY_SERVER_HOST always points at 127.0.0.1 so child processes hit
+        # the loopback listener (no access key required), regardless of bind.
         ENV["CLACKY_SERVER_PORT"]  = @port.to_s
-        ENV["CLACKY_SERVER_HOST"]  = (@host == "0.0.0.0" ? "127.0.0.1" : @host)
+        ENV["CLACKY_SERVER_HOST"]  = "127.0.0.1"
         product_name = Clacky::BrandConfig.load.product_name
         ENV["CLACKY_PRODUCT_NAME"] = (product_name.nil? || product_name.strip.empty?) ? "OpenClacky" : product_name
 
@@ -268,6 +270,13 @@ module Clacky
             server.listeners.delete(@inherited_socket)
             Clacky::Logger.info("[HttpServer PID=#{Process.pid}] detached inherited socket fd=#{@inherited_socket.fileno} before shutdown")
           end
+          # Close the loopback listener we created in this worker so the port
+          # is freed before the next worker starts (hot restart path).
+          if @loopback_listener
+            server.listeners.delete(@loopback_listener)
+            @loopback_listener.close rescue nil
+            @loopback_listener = nil
+          end
           t1 = Thread.new { @channel_manager.stop rescue nil }
           t2 = Thread.new { Clacky::BrowserManager.instance.stop rescue nil }
           t3 = Thread.new { @mcp_registry&.shutdown rescue nil }
@@ -284,6 +293,24 @@ module Clacky
           Clacky::Logger.info("[HttpServer PID=#{Process.pid}] injected inherited fd=#{@inherited_socket.fileno} listeners=#{server.listeners.map(&:fileno).inspect}")
         else
           Clacky::Logger.info("[HttpServer PID=#{Process.pid}] standalone, WEBrick listeners=#{server.listeners.map(&:fileno).inspect}")
+        end
+
+        # When bound to a specific non-loopback address (e.g. 192.168.x.x),
+        # local skills using 127.0.0.1 cannot reach the server. Attach an
+        # extra loopback listener so child processes (curl in skills, MCP, etc.)
+        # can always talk to the server via 127.0.0.1 without an access key.
+        # Skipped for 0.0.0.0 (already covers loopback) and for loopback binds.
+        @loopback_listener = nil
+        if !@localhost_only && @host.to_s != "0.0.0.0"
+          begin
+            @loopback_listener = TCPServer.new("127.0.0.1", @port)
+            @loopback_listener.setsockopt(Socket::SOL_SOCKET, Socket::SO_REUSEADDR, true)
+            server.listeners << @loopback_listener
+            Clacky::Logger.info("[HttpServer PID=#{Process.pid}] added loopback listener fd=#{@loopback_listener.fileno} on 127.0.0.1:#{@port}")
+          rescue Errno::EADDRINUSE, Errno::EACCES => e
+            Clacky::Logger.warn("[HttpServer PID=#{Process.pid}] could not add loopback listener on 127.0.0.1:#{@port}: #{e.class}: #{e.message}")
+            @loopback_listener = nil
+          end
         end
 
         # Mount API + WebSocket handler (takes priority).
@@ -1515,6 +1542,13 @@ module Clacky
         ["127.0.0.1", "::1", "localhost"].include?(host.to_s.strip)
       end
 
+      private def loopback_ip?(ip)
+        return false if ip.nil?
+        s = ip.to_s.strip
+        return true if s == "127.0.0.1" || s == "::1"
+        s.start_with?("127.") || s == "::ffff:127.0.0.1"
+      end
+
       # Resolve access key from CLACKY_ACCESS_KEY env var only.
       private def resolve_access_key
         key = ENV.fetch("CLACKY_ACCESS_KEY", "").strip
@@ -1562,6 +1596,11 @@ module Clacky
         return true unless @access_key   # public but no key configured (cli already blocked this)
 
         ip        = req.peeraddr.last rescue "unknown"
+        # Requests arriving on the loopback interface are always trusted,
+        # even when the server is bound to a public address. This lets local
+        # skills/curl talk to the server without an access key.
+        return true if loopback_ip?(ip)
+
         candidate = extract_key(req)
 
         # Lazily evict expired lockout entries to prevent unbounded memory growth.
@@ -2043,7 +2082,7 @@ module Clacky
 
       private def mcp_localhost_only(req, res)
         ip = req.peeraddr.last rescue nil
-        return true if %w[127.0.0.1 ::1].include?(ip)
+        return true if loopback_ip?(ip)
 
         json_response(res, 403, { ok: false, error: "MCP write operations are only allowed from localhost" })
         false

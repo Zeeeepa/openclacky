@@ -1,4 +1,5 @@
 require "spec_helper"
+require "clacky/server/http_server"
 
 # ---------------------------------------------------------------------------
 # Unit tests for HttpServer access key authentication logic.
@@ -193,6 +194,71 @@ RSpec.describe "HttpServer access key authentication" do
 
     it "returns nil when all sources are empty" do
       expect(server.send(:extract_key, make_req)).to be_nil
+    end
+  end
+
+  # ── loopback_ip? helper ──────────────────────────────────────────────────
+  describe "loopback_ip?" do
+    let(:server) { Clacky::Server::HttpServer.allocate }
+
+    it "treats 127.0.0.1 as loopback" do
+      expect(server.send(:loopback_ip?, "127.0.0.1")).to be true
+    end
+
+    it "treats ::1 as loopback" do
+      expect(server.send(:loopback_ip?, "::1")).to be true
+    end
+
+    it "treats 127.x.y.z as loopback" do
+      expect(server.send(:loopback_ip?, "127.0.0.5")).to be true
+    end
+
+    it "treats IPv4-mapped loopback as loopback" do
+      expect(server.send(:loopback_ip?, "::ffff:127.0.0.1")).to be true
+    end
+
+    it "rejects LAN addresses" do
+      expect(server.send(:loopback_ip?, "192.168.1.10")).to be false
+    end
+
+    it "rejects nil" do
+      expect(server.send(:loopback_ip?, nil)).to be false
+    end
+  end
+
+  # ── Loopback requests bypass auth in public mode ─────────────────────────
+  # When the server is bound to a public address (e.g. 192.168.x.x) but the
+  # request actually arrives on the loopback interface (local skills using
+  # 127.0.0.1), check_access_key must short-circuit to true so child processes
+  # don't need an access key.
+  describe "check_access_key loopback bypass" do
+    let(:server) { Clacky::Server::HttpServer.allocate }
+
+    before do
+      server.instance_variable_set(:@localhost_only, false)
+      server.instance_variable_set(:@access_key, "secret")
+      server.instance_variable_set(:@auth_failures, {})
+      server.instance_variable_set(:@auth_failures_mutex, Mutex.new)
+    end
+
+    def make_req(peer_ip)
+      req = double("WEBrick::HTTPRequest")
+      allow(req).to receive(:peeraddr).and_return(["AF_INET", 0, "host", peer_ip])
+      allow(req).to receive(:[]).and_return("")
+      allow(req).to receive(:query_string).and_return("")
+      allow(req).to receive(:cookies).and_return([])
+      req
+    end
+
+    it "allows loopback peer without a key" do
+      res = WEBrick::HTTPResponse.new(WEBrick::Config::HTTP)
+      expect(server.send(:check_access_key, make_req("127.0.0.1"), res)).to be true
+    end
+
+    it "still requires a key for non-loopback peers" do
+      res = WEBrick::HTTPResponse.new(WEBrick::Config::HTTP)
+      expect(server.send(:check_access_key, make_req("192.168.1.50"), res)).to be false
+      expect(res.status).to eq(401)
     end
   end
 end
