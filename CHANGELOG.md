@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.11] - 2026-06-05
+
+### Added
+- Logo branding in sidebar footer with link to official website
+- Onboarding charge tips for new users to understand billing
+- WebUI tool panel expand/collapse toggle for better space management
+- Region parameter for CDN and install script switching (CN vs global)
+- Automated Feishu app creation via OAuth device flow — no more manual App ID/Secret entry
+- Feishu group chat history with sender name identification
+- Cron job entry sorting by enabled status and running state indicator
+- Quick switch model selector: show only active model name in card, rename sub-model
+- API server now binds to non-local IP by default for LAN access
+
+### Improved
+- Sequential image generation now shows tips when generation is slow
+- Startup time reduced significantly
+- Clear GEM_HOME during Ruby 3 installation to avoid gem conflicts
+
+### Fixed
+- Uninstall crashes when brand.yml has no product_name configured
+- Tool calls go stale after channel interrupt, causing silent failures
+- Sanitize tool names to prevent invalid characters
+- Completion summary now accumulates correctly across supplementary message relays
+- WSL install exit code 2 (network unreachable) now propagates properly
+- Recycled sessions now sorted by deletion time instead of creation time
+- Idle status now updates correctly after server restart
+
 ## [1.2.10] - 2026-06-03
 
 ### Added
