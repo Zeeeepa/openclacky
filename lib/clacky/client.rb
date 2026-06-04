@@ -260,6 +260,7 @@ module Clacky
       end
 
       result = aggregator.to_h
+      log_stream_summary("bedrock", aggregator, result["stopReason"])
       # A complete Converse stream always emits stopReason in its messageStop
       # frame. Its absence means the upstream cut the stream mid-response,
       # leaving a half-written message; retry rather than accept the truncation.
@@ -318,6 +319,7 @@ module Clacky
       end
 
       result = aggregator.to_h
+      log_stream_summary("anthropic", aggregator, result["stop_reason"])
       # A complete Messages stream always emits stop_reason in its message_delta
       # frame. Its absence means the upstream cut the stream mid-response,
       # leaving a half-written message; retry rather than accept the truncation.
@@ -380,6 +382,7 @@ module Clacky
       end
 
       result = aggregator.to_h
+      log_stream_summary("openai", aggregator, result.dig("choices", 0, "finish_reason"))
       # A complete chat-completion stream always terminates with a frame
       # carrying finish_reason. Its absence means the upstream cut the stream
       # mid-response (e.g. proxy idle-timeout, connection reset that Faraday
@@ -460,6 +463,24 @@ module Clacky
     # Bedrock Converse streaming endpoint path.
     private def bedrock_stream_endpoint(model)
       "/model/#{model}/converse-stream"
+    end
+
+    # Emit a one-line summary of a streaming response when something looks
+    # off (parse failures, missing terminal frame). No-op on the happy path
+    # to keep logs quiet.
+    private def log_stream_summary(provider, aggregator, terminal_marker)
+      parse_failures = aggregator.respond_to?(:parse_failures) ? aggregator.parse_failures.to_i : 0
+      missing_terminal = terminal_marker.nil?
+      return if parse_failures.zero? && !missing_terminal
+
+      Clacky::Logger.warn("stream.summary",
+        provider: provider,
+        frames_seen: aggregator.respond_to?(:frames_seen) ? aggregator.frames_seen : nil,
+        bytes_seen: aggregator.respond_to?(:bytes_seen) ? aggregator.bytes_seen : nil,
+        parse_failures: parse_failures,
+        saw_done: aggregator.respond_to?(:saw_done?) ? aggregator.saw_done? : nil,
+        terminal_marker_present: !missing_terminal
+      )
     end
 
     # Pull complete SSE frames out of a buffer and yield them as (event, data).

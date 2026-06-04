@@ -19,9 +19,16 @@ module Clacky
       @usage = {}
       @last_input_tokens = 0
       @last_output_tokens = 0
+      @parse_failures = 0
+      @frames_seen = 0
+      @bytes_seen = 0
     end
 
+    attr_reader :parse_failures, :frames_seen, :bytes_seen
+
     def handle(event, data_str)
+      @bytes_seen += data_str.to_s.bytesize
+      @frames_seen += 1
       data = parse_or_nil(data_str)
       return unless data
 
@@ -99,7 +106,16 @@ module Clacky
 
     private def parse_or_nil(s)
       JSON.parse(s)
-    rescue JSON::ParserError
+    rescue JSON::ParserError => e
+      @parse_failures += 1
+      if @parse_failures == 1
+        Clacky::Logger.warn("stream.parse_failure",
+          provider: "anthropic",
+          error: "#{e.class}: #{e.message}",
+          frame_head: s.to_s[0, 200],
+          frame_bytes: s.to_s.bytesize
+        )
+      end
       nil
     end
 

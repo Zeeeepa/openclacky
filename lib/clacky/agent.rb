@@ -488,14 +488,34 @@ module Clacky
           # truncation pattern, we still won't silently exit while the model
           # is mid-tool_call.
           if response[:tool_calls].nil? || response[:tool_calls].empty?
-            # [DIAG] Pin down exactly which sub-condition triggered the task exit.
+            content_str = response[:content].to_s
+            stripped = content_str.strip
+            ends_with_question = stripped.end_with?("?", "？")
+            finish_reason_str = response[:finish_reason].to_s
+            completion_tokens = response.dig(:token_usage, :completion_tokens)
+
             Clacky::Logger.info("agent.loop_break_normal",
               session_id: @session_id,
               iteration: @iterations,
               branch: (response[:tool_calls].nil? ? "tool_calls_nil" : "tool_calls_empty"),
-              finish_reason: response[:finish_reason].to_s,
-              tool_calls_count: (response[:tool_calls] || []).size
+              finish_reason: finish_reason_str,
+              tool_calls_count: (response[:tool_calls] || []).size,
+              completion_tokens: completion_tokens,
+              max_tokens: @config.max_tokens,
+              content_len: content_str.length,
+              content_ends_with_question: ends_with_question
             )
+
+            if finish_reason_str == "length"
+              Clacky::Logger.warn("agent.loop_break_on_length",
+                session_id: @session_id,
+                iteration: @iterations,
+                completion_tokens: completion_tokens,
+                max_tokens: @config.max_tokens,
+                content_len: content_str.length,
+                content_tail: content_str[-200, 200]
+              )
+            end
             if response[:content] && !response[:content].empty?
               emit_assistant_message(response[:content], reasoning_content: response[:reasoning_content])
             end
