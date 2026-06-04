@@ -193,6 +193,7 @@ module Clacky
     #   this bypass lets us recover on the retry without a server restart.
     def to_api(force_reasoning_content_pad: false)
       msgs = @messages.map { |m| strip_for_api(m) }
+      msgs = repair_tool_call_pairing(msgs)
       ensure_reasoning_content_consistency(msgs, force: force_reasoning_content_pad)
     end
 
@@ -274,6 +275,62 @@ module Clacky
 
     private def strip_internal_fields(message)
       message.reject { |k, _| INTERNAL_FIELDS.include?(k) }
+    end
+
+    # Defensive integrity pass before sending history to the LLM.
+    # OpenAI-compat protocols (incl. DeepSeek) require every assistant.tool_calls
+    # to be followed by a tool message for each tool_call_id. If a previous turn
+    # was interrupted mid-act() — e.g. a channel user sent a second message
+    # before the first finished — the tool segment may be missing entries,
+    # producing HTTP 400 "insufficient tool messages following tool_calls".
+    # This pass scans the whole history and inserts placeholder tool messages
+    # for any unmatched ids. It is deterministic (same input → same output)
+    # so prompt caching is not disturbed.
+    private def repair_tool_call_pairing(msgs)
+      result = []
+      i = 0
+      while i < msgs.size
+        msg = msgs[i]
+        result << msg
+
+        if msg[:role] == "assistant" && msg[:tool_calls].is_a?(Array) && !msg[:tool_calls].empty?
+          expected_ids = msg[:tool_calls].map { |tc| tc[:id] }.compact
+          seen_ids = []
+
+          j = i + 1
+          while j < msgs.size && tool_result_message?(msgs[j])
+            result << msgs[j]
+            seen_ids.concat(tool_result_ids(msgs[j]))
+            j += 1
+          end
+
+          (expected_ids - seen_ids).each do |id|
+            result << {
+              role: "tool",
+              tool_call_id: id,
+              content: '{"error":"Tool result missing (interrupted)"}'
+            }
+          end
+
+          i = j
+        else
+          i += 1
+        end
+      end
+      result
+    end
+
+    private def tool_result_message?(msg)
+      MessageFormat::OpenAI.tool_result_message?(msg) ||
+        MessageFormat::Anthropic.tool_result_message?(msg)
+    end
+
+    private def tool_result_ids(msg)
+      if MessageFormat::OpenAI.tool_result_message?(msg)
+        MessageFormat::OpenAI.tool_call_ids(msg)
+      else
+        MessageFormat::Anthropic.tool_use_ids(msg)
+      end
     end
 
     # Detect thinking-mode providers purely from history content and pad

@@ -824,6 +824,7 @@ module Clacky
       # reasoning_content so every outgoing payload satisfies the provider's
       # "reasoning_content must be passed back" contract.
       msg[:reasoning_content] = response[:reasoning_content] if response[:reasoning_content]
+      check_stale!
       @history.append(msg)
 
       # Close the thinking spinner before returning. The caller (run loop)

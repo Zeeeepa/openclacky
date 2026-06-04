@@ -280,12 +280,25 @@ module Clacky
         sub_count = web_ui_for_session_diag(session_id)
         Clacky::Logger.info("[ChannelManager] Routing to session #{session_id[0, 8]} (status=#{session[:status]}, text=#{text.inspect}, channel_subs=#{sub_count})")
 
-        # If session is running, interrupt it automatically (mimics CLI behavior)
+        # If session is running, interrupt it AND wait for the old thread to
+        # actually unwind before starting a new task. Without the join, two
+        # threads briefly race on the same agent/history and the old thread
+        # can land an assistant.tool_calls message that the new thread then
+        # ships to the LLM with no matching tool result — DeepSeek (strict
+        # OpenAI-compat) rejects this with HTTP 400 "insufficient tool
+        # messages following tool_calls message". CLI already waits via
+        # join(2); we do the same here so all entrypoints behave alike.
         if session[:status] == :running
           Clacky::Logger.info("[ChannelManager] Session busy, interrupting previous task")
+          old_thread = nil
+          @registry.with_session(session_id) { |s| old_thread = s[:thread] }
           @interrupt_session.call(session_id)
-          # Wait briefly for the thread to catch the interrupt and update status
-          sleep 0.1
+          if old_thread&.alive?
+            old_thread.join(2)
+            if old_thread.alive?
+              Clacky::Logger.warn("[ChannelManager] previous task did not finish within 2s; continuing anyway (watchdog will escalate)")
+            end
+          end
         end
 
         agent  = session[:agent]

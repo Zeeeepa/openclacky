@@ -20,7 +20,7 @@ RSpec.describe Clacky::MessageHistory do
   end
 
   def tool_result_msg(tool_call_id = "tc_1", **opts)
-    { role: "tool", tool_results: [{ tool_use_id: tool_call_id, content: "result" }],
+    { role: "tool", tool_call_id: tool_call_id, content: "result",
       task_id: 1, created_at: Time.now.to_f }.merge(opts)
   end
 
@@ -321,6 +321,55 @@ RSpec.describe Clacky::MessageHistory do
       history.append(tool_result_msg)
       api_msgs = history.to_api
       expect(api_msgs.size).to eq(3)
+    end
+
+    context "tool_call/tool_result pairing repair" do
+      it "inserts a placeholder tool message for a mid-history assistant.tool_calls with no tool result (e.g. loaded from a corrupted session.json)" do
+        msgs = history.instance_variable_get(:@messages)
+        msgs << user_msg
+        msgs << assistant_with_tool_calls
+        msgs << user_msg("next question")
+        api_msgs = history.to_api
+        expect(api_msgs.size).to eq(4)
+        expect(api_msgs[2][:role]).to eq("tool")
+        expect(api_msgs[2][:tool_call_id]).to eq("tc_1")
+        expect(api_msgs[2][:content]).to include("interrupted")
+        expect(api_msgs[3][:role]).to eq("user")
+      end
+
+      it "fills in only the missing id when assistant has multiple tool_calls and only some have results" do
+        msgs = history.instance_variable_get(:@messages)
+        msgs << user_msg
+        msgs << { role: "assistant", content: nil,
+                  tool_calls: [{ id: "tc_1", name: "bash", arguments: "{}" },
+                               { id: "tc_2", name: "bash", arguments: "{}" }],
+                  task_id: 1, created_at: Time.now.to_f }
+        msgs << tool_result_msg("tc_1")
+        msgs << user_msg("next")
+        api_msgs = history.to_api
+        expect(api_msgs.size).to eq(5)
+        expect(api_msgs[3][:role]).to eq("tool")
+        expect(api_msgs[3][:tool_call_id]).to eq("tc_2")
+        expect(api_msgs[4][:role]).to eq("user")
+      end
+
+      it "does not insert anything when all tool_calls have matching results" do
+        history.append(user_msg)
+        history.append(assistant_with_tool_calls)
+        history.append(tool_result_msg)
+        history.append(user_msg("next"))
+        api_msgs = history.to_api
+        expect(api_msgs.size).to eq(4)
+        expect(api_msgs.count { |m| m[:role] == "tool" }).to eq(1)
+      end
+
+      it "is deterministic — calling to_api twice on the same history produces identical output (cache-safe)" do
+        msgs = history.instance_variable_get(:@messages)
+        msgs << user_msg
+        msgs << assistant_with_tool_calls
+        msgs << user_msg("interrupting question")
+        expect(history.to_api).to eq(history.to_api)
+      end
     end
 
     it "keeps system message at the start" do
