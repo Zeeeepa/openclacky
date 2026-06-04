@@ -256,8 +256,7 @@ body {
   letter-spacing: 0;
 }
 .header-logo-img {
-  height: 1.375rem;
-  max-width: 6.875rem;
+  height: 2.5rem;
   object-fit: contain;
   display: block;
   flex-shrink: 0;

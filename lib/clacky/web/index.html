@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title id="page-title">{{BRAND_NAME}}</title>
-  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <link rel="icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/apple-touch-icon-180.png">
   <link rel="stylesheet" href="/vendor/katex/katex.min.css">
   <link rel="stylesheet" href="/vendor/hljs/hljs-theme.css">
   <link rel="stylesheet" href="/app.css">
@@ -30,8 +31,8 @@
           <path d="M9 3v18"/>
         </svg>
       </button>
-      <div id="header-brand" style="cursor:pointer" onclick="Router.navigate('chat')">
-        <img class="header-logo-img" id="header-logo-img" src="" alt="" style="display:none">
+      <div id="header-brand" class="has-logo" style="cursor:pointer" onclick="Router.navigate('chat')">
+        <img class="header-logo-img" id="header-logo-img" src="/logo_nav_dark.png" alt="OpenClacky">
         <span class="header-logo-divider"></span>
         <span class="header-logo" id="header-logo">{{BRAND_NAME}}</span>
         <!-- Owner badge: visible only for creator-tier licenses (user_licensed=true).
