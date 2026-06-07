@@ -39,16 +39,18 @@ module Clacky
           "abs-claude-haiku-4-5",
           "dsk-deepseek-v4-pro",
           "dsk-deepseek-v4-flash",
-          "or-gemini-3-1-pro"
+          "or-gemini-3-1-pro",
+          "or-gemini-3-5-flash"
         ],
         # Image generation models served by the openclacky platform
         # gateway. The gateway exposes a standard OpenAI-compatible
         # /v1/images/generations endpoint, so the same OpenAICompat
-        # provider class handles them. `or-` prefix mirrors the chat
-        # model naming — these are routed through the OpenRouter
-        # backend by the platform.
+        # provider class handles them. `or-` prefix is a routing alias
+        # only — the platform may dispatch to OpenRouter or Vertex AI
+        # (Gemini Nano Banana family) depending on the model.
         "image_models" => [
           "or-gemini-3-pro-image",
+          "or-gemini-3-1-flash-image",
           "or-gpt-image-2"
         ],
         "default_image_model" => "or-gpt-image-2",
@@ -65,20 +67,17 @@ module Clacky
         # Per-primary lite pairing: keys are "strong" primary models, values
         # are the lite sidekick to auto-inject when that primary is the
         # default. Lite is consumed by some subagents for cheap/fast work;
-        # weak models (haiku / v4-flash) ARE the lite tier themselves, so
-        # they're intentionally not listed here — no injection happens when
-        # the default model is already lite-class.
-        #
-        # or-gemini-3-1-pro is intentionally absent: Gemini has no lite
-        # sibling wired up (yet) on this provider; subagents using the
-        # Gemini default will just reuse it for lite work until we add one.
+        # weak models (haiku / v4-flash / 3-5-flash) ARE the lite tier
+        # themselves, so they're intentionally not listed here as keys —
+        # no injection happens when the default model is already lite-class.
         "lite_models" => {
           "abs-claude-opus-4-8"   => "abs-claude-haiku-4-5",
           "abs-claude-opus-4-7"   => "abs-claude-haiku-4-5",
           "abs-claude-opus-4-6"   => "abs-claude-haiku-4-5",
           "abs-claude-sonnet-4-6" => "abs-claude-haiku-4-5",
           "abs-claude-sonnet-4-5" => "abs-claude-haiku-4-5",
-          "dsk-deepseek-v4-pro"   => "dsk-deepseek-v4-flash"
+          "dsk-deepseek-v4-pro"   => "dsk-deepseek-v4-flash",
+          "or-gemini-3-1-pro"     => "or-gemini-3-5-flash"
         },
         # Fallback chain: if a model is unavailable, try the next one in order.
         # Keys are primary model names; values are the fallback model to use instead.
