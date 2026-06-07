@@ -26,6 +26,7 @@ module Clacky
       def run_skill_evolution_hooks
         return unless skill_evolution_enabled?
         return if @is_subagent
+        return unless skill_evolution_visible? || skill_evolution_has_work?
 
         with_skill_evolution_phase do
           if @skill_execution_context
@@ -33,6 +34,18 @@ module Clacky
           else
             maybe_create_skill_from_task
           end
+        end
+      end
+
+      private def skill_evolution_visible?
+        @config.respond_to?(:verbose) && @config.verbose
+      end
+
+      private def skill_evolution_has_work?
+        if @skill_execution_context
+          should_reflect_on_skill?
+        else
+          should_auto_create_skill?
         end
       end
 

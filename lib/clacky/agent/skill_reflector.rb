@@ -19,43 +19,33 @@ module Clacky
       # Check if we should reflect on the skill that just executed
       # Called from SkillEvolution#run_skill_evolution_hooks
       def maybe_reflect_on_skill
-        return unless @skill_execution_context
-
-        # Only reflect on skills that the user explicitly invoked via slash command.
-        # Skills triggered by the LLM itself (e.g. as part of a broader task) or
-        # platform-management skills invoked incidentally should not be reflected on.
-        return unless @skill_execution_context[:slash_command]
-
-        # Skip default and brand skills — they are system-owned and should not be
-        # auto-improved by the evolution system.
-        source = @skill_execution_context[:source]
-        return if source == :default || source == :brand
+        return unless should_reflect_on_skill?
 
         skill_name = @skill_execution_context[:skill_name]
-        start_iteration = @skill_execution_context[:start_iteration]
-        
-        # Calculate iterations within the skill execution (not session-cumulative)
-        iterations = @iterations - start_iteration
 
-        # Only reflect if the skill actually ran for a meaningful number of iterations
-        return if iterations < MIN_SKILL_ITERATIONS
-
-        # Fork an isolated subagent to reflect + improve — does NOT touch main history
         @ui&.show_info("Reflecting on skill execution: #{skill_name}")
         subagent = fork_subagent
         result = subagent.run(build_skill_reflection_prompt(skill_name))
 
-        # Merge subagent cost into parent's cumulative session spend so the
-        # sessionbar reflects the real total. Without this, reflection cost
-        # silently disappears from the user's visible total.
         if result
           subagent_cost = result[:total_cost_usd] || 0.0
           @total_cost += subagent_cost
           @ui&.update_sessionbar(cost: @total_cost, cost_source: @cost_source)
         end
 
-        # Clear the context so we don't reflect again
         @skill_execution_context = nil
+      end
+
+      private def should_reflect_on_skill?
+        return false unless @skill_execution_context
+        return false unless @skill_execution_context[:slash_command]
+
+        source = @skill_execution_context[:source]
+        return false if source == :default || source == :brand
+
+        start_iteration = @skill_execution_context[:start_iteration]
+        iterations = @iterations - start_iteration
+        iterations >= MIN_SKILL_ITERATIONS
       end
 
       # Build the reflection prompt content
